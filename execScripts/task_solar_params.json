@@ -1,0 +1,216 @@
+{
+  "stop": false,
+  "repeat": "15",
+  "logfile": "/var/log/heizung/heizstab.log",
+  "Dbbase": {
+    "host": "192.168.178.76",
+    "user": "root",
+    "pass": "sql666sql",
+    "dbname": "co5_solar",
+    "tabelle": "tl_..."
+  },
+  "Heizintervalle": [
+    {
+      "an": "12:00",
+      "aus": "13:00"
+    },
+    {
+      "an": "16:00",
+      "aus": "17:00"
+    }
+  ],
+  "urlheizStab": "192.168.178.46",
+  "urlIQbox": "192.168.178.26",
+  "Variables": [
+    {
+      "name": "aktuell Pwr",
+      "type": "Heizstab",
+      "parameter": "power_elwa2",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "elwaPwrkWh"
+    },
+    {
+      "name": "protokoll",
+      "type": "Heizstab",
+      "parameter": "ctrl",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "elwaProt"
+    },
+    {
+      "name": "maxPower",
+      "type": "Heizstab",
+      "parameter": "maxpwr",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "elwaPwr"
+    },
+    {
+      "name": "minTemp",
+      "type": "Heizstab",
+      "parameter": "ww1boost",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "elwaTemp"
+    },
+    {
+      "name": "aktTemp1",
+      "type": "Heizstab",
+      "parameter": "temp1",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "elwaTemp"
+    },
+    {
+      "name": "aktTemp2",
+      "type": "Heizstab",
+      "parameter": "temp2",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "elwaTemp"
+    },
+    {
+      "name": "Batt SOC",
+      "type": "IQBox",
+      "parameter": "sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQSOC"
+    },
+    {
+      "name": "Batt Temp",
+      "type": "IQBox",
+      "parameter": "sajhybrid_battery_94_HSR2103J2311E08738_battery_temperature",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQTemp"
+    },
+    {
+      "name": "Batt Ladung ges.",
+      "type": "IQBox",
+      "parameter": "sajhybrid_battery_94_HSR2103J2311E08738_battery_totalChargeEnergy",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    },
+    {
+      "name": "Batterie Entladung ges.",
+      "type": "IQBox",
+      "parameter": "sajhybrid_battery_94_HSR2103J2311E08738_battery_totalDischargeEnergy",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    },
+    {
+      "name": "Wechselrichter active DC Power",
+      "type": "IQBox",
+      "parameter": "sajhybrid_inverter_94_HSR2103J2311E08738_harmonized_mppt_dc_power",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkW"
+    },
+    {
+      "name": "Wechselrichter Inverter Power",
+      "type": "IQBox",
+      "parameter": "sajhybrid_inverter_94_HSR2103J2311E08738_inverter_activePower",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkW"
+    },
+    {
+      "name": "Wechselrichter Energie in Total",
+      "type": "IQBox",
+      "parameter": "sajhybrid_inverter_94_HSR2103J2311E08738_inverter_pvEnergy",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    },
+    {
+      "name": "Wechselrichter Total PV Energie in",
+      "type": "IQBox",
+      "parameter": "sajhybrid_inverter_94_HSR2103J2311E08738_inverter_energyIn",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    },
+    {
+      "name": "Wechselrichter Total PV Energie out",
+      "type": "IQBox",
+      "parameter": "sajhybrid_inverter_94_HSR2103J2311E08738_inverter_energyOut",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    },
+    {
+      "name": "ZWZ Z\u00e4hler Power Out",
+      "type": "IQBox",
+      "parameter": "sajhybrid_powermeter_94_HSR2103J2311E08738_harmonized_power_out",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkW"
+    },
+    {
+      "name": "ZWZ Z\u00e4hler Power In",
+      "type": "IQBox",
+      "parameter": "sajhybrid_powermeter_94_HSR2103J2311E08738_harmonized_power_in",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkW"
+    },
+    {
+      "name": "ZWZ Z\u00e4hler Total PV Energie Export",
+      "type": "IQBox",
+      "parameter": "sajhybrid_powermeter_94_HSR2103J2311E08738_powermeter_totalExport",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    },
+    {
+      "name": "ZWZ Z\u00e4hler Total PV Energie Import",
+      "type": "IQBox",
+      "parameter": "sajhybrid_powermeter_94_HSR2103J2311E08738_powermeter_totalImport",
+      "anzahl": "1",
+      "trenner": " ",
+      "zaehler": "0",
+      "zaehlermax": "0",
+      "fkt": "IQkWh"
+    }
+  ]
+}
