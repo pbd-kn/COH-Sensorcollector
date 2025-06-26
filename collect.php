@@ -80,7 +80,6 @@ while (1) {
         $sensorSource    = isset($result['sensorSource'])    ? $result['sensorSource']    : '';
 
         // Schritt 1: Prüfen, ob ein Datensatz mit gleichem sensorID + sensorValue bereits existiert
-        // Schritt 1: Prüfen, ob ein Datensatz mit gleichem sensorID + sensorValue bereits existiert
         $escapedValue = $db->real_escape_string(trim((string)$sensorValue));
 
         $checkSql = "
@@ -104,8 +103,6 @@ while (1) {
             $updateResult = $db->query($updateSql);
 
             if (!$updateResult) {
-//$error = $db->makeerror();
-//echo "UPDATE fehlgeschlagen: $error\n";
                 $logger->Error($db->makeerror());
             }
         } else {
