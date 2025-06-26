@@ -80,16 +80,18 @@ while (1) {
         $sensorSource    = isset($result['sensorSource'])    ? $result['sensorSource']    : '';
 
         // Schritt 1: Prüfen, ob ein Datensatz mit gleichem sensorID + sensorValue bereits existiert
-$numericValue = is_numeric($sensorValue) ? floatval($sensorValue) : 0.0;
+        // Schritt 1: Prüfen, ob ein Datensatz mit gleichem sensorID + sensorValue bereits existiert
+        $escapedValue = $db->real_escape_string(trim((string)$sensorValue));
 
         $checkSql = "
             SELECT id 
             FROM tl_coh_sensorvalue 
             WHERE sensorID = '{$db->real_escape_string($sensorID)}' 
-              AND ABS(sensorValue - {$numericValue}) < 0.0001
+              AND TRIM(sensorValue) = '$escapedValue'
                 ORDER BY tstamp DESC 
                 LIMIT 1
         ";
+
 
         $resultCheck = $db->query($checkSql);
         if ($row = $resultCheck->fetch_assoc()) {
