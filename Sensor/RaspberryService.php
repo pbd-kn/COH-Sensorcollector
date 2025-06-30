@@ -82,8 +82,8 @@ class RaspberryService implements SensorFetcherInterface
                 }
                 
                 $value = $this->raspBerryCmd($url,$lokalAccess);
-                if (empty($value)) {
-                    $this->logger->Error('raspberry transFormProcedur für SensorID '.$sensor['sensorID']."$lokalAccess value empty");  
+                if ($value === '' || $value === null) {
+                    $this->logger->Error('raspberry raspBerryCmd für SensorID '.$sensor['sensorID']." lokaladress $lokalAccess value empty");  
                 }
                 $einheit=$sensor['sensorEinheit'];  
                 if (!empty($sensor['transFormProcedur'])) {
@@ -131,7 +131,8 @@ class RaspberryService implements SensorFetcherInterface
         $whitelist = ['checkPhpHeizungserver.sh', 
             'logfile_protokoll.sh',
             'heizung-server-configjson.php',
-            'myOtherCommand'];  // zulässige Kommandos
+            'myOtherCommand',
+            'checkSensorCollectorServer.sh'];  
             
         // Zerlege den String anhand der Doppelpunkte
         $parts = explode(':', $cmd);

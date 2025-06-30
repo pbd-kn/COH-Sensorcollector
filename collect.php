@@ -11,7 +11,8 @@ use PbdKn\cohSensorcollector\FetcherRegistry;
 use PbdKn\cohSensorcollector\Logger;
 use mysqli;
 
-$logger= Logger::getInstance();    // globaler logger für alle instanzen
+//$logger= Logger::getInstance();    // globaler logger für alle instanzen
+$logger= Logger::getInstance('/var/log/coh/sensor.collect.log');    // globaler logger für alle mit logfile instanzen
 date_default_timezone_set('Europe/Berlin');
 
 
