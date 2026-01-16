@@ -1,0 +1,17 @@
+{
+  "stop": false,
+  "repeat": "15",
+  "logfile": "/home/peter/coh/logs/heizstabserver.log",
+  "Heizintervalle": [
+    {
+      "an": "12:00",
+      "aus": "13:00"
+    },
+    {
+      "an": "16:00",
+      "aus": "17:00"
+    }
+  ],
+  "urlheizStab": "192.168.178.46",
+  "urlIQbox": "192.168.178.26"
+}

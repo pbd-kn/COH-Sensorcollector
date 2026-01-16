@@ -132,7 +132,8 @@ class RaspberryService implements SensorFetcherInterface
             'logfile_protokoll.sh',
             'heizung-server-configjson.php',
             'myOtherCommand',
-            'checkSensorCollectorServer.sh'];  
+            'checkSensorCollectorServer.sh',
+            'check_disk_usage.sh'];  
             
         // Zerlege den String anhand der Doppelpunkte
         $parts = explode(':', $cmd);
@@ -150,18 +151,20 @@ class RaspberryService implements SensorFetcherInterface
                 $this->logger->debugMe("raspberry action: $action");
                 if ($action === 'exec' ) {
                     // exec Command ausführen (Pfad optional anpassen)
-                        $output = shell_exec("bash /etc/coh/scripts/execScripts/$value");
+                        $output = shell_exec("bash ".__DIR__."/RaspberryExecScripts/$value");
+//echo "Action $action" . "bash ".__DIR__."/RaspberryExecScripts/$value"." Result: $output\n ";
+//                        $output = shell_exec("bash /etc/coh/scripts/execScripts/$value");
                         $this->logger->debugMe("raspberry Result: $output");
                         return $output;
                 }
                 if ($action === 'php' ) {
                     // php Command ausführen (Pfad optional anpassen)
                     // php:command:heizung-server-configjson.php:json:Heizintervalle
-                        $retval = shell_exec("/usr/bin/php /etc/coh/scripts/execScripts/$value");
+                        $retval = shell_exec("/usr/bin/php ".__DIR__."/RaspberryExecScripts/$value");
                         if (count($parts) >= 3) {   // konvertierung nach evtl: json
                             if ($parts[3] == 'json') {
                                 $this->logger->debugMe("raspberry read php script: $value");
-                                $this->logger->debugMe("raspberry read: $retval");    
+                                //$this->logger->debugMe("raspberry read: $retval");    
                                 $retval = json_decode($retval, true);   // json als array
                                 if (count($parts) >= 4) {                                
                                     $retval=$retval[$parts[4]];    // hole wert aus json
@@ -179,7 +182,7 @@ class RaspberryService implements SensorFetcherInterface
                 return null;  
             }
         } else {
-            $this->logger->Error("raspberry ungültiges Format: $cmd");
+            $this->logger->Error("raspberry ungültiges Format: url $url  $cmd");
             return null;  
         }
     }

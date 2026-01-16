@@ -14,17 +14,28 @@ $logger = Logger::getInstance(dateiname: "log.txt");        // auch mit benannte
 
 class Logger
 {
-    private string $dateiname;
+    private string $logfile ="";
     private bool $debug = false;
+    private $logfileHandle = null;
     // Variablen für späte Initialisierung
     private static ?Logger $instance = null;
     private ?StreamHandler $streamHandler = null;
     
-    private function __construct(?string $dateiname = null, bool $debug = false)
+    private function __construct(?string $logfile = null, bool $debug = false)
     {
 //        echo "Logger instanziiert mit Datei: {$dateiname}, Debug: " . ($debug ? 'an' : 'aus') . "\n";
         $this->debug=$debug;
-        if ($dateiname !== null) $this->dateiname=$dateiname;
+        if ($logfile) { 
+            $dir = dirname($logfile);
+                // nur öffnen, wenn Verzeichnis existiert und beschreibbar ist
+            if (is_dir($dir) && is_writable($dir)) {
+                $this->logfile=$logfile;
+                $this->logfileHandle = @fopen($logfile, 'a');
+            } else {
+              $this->logfile="";
+              $this->logfileHandle=null;
+            }
+        }            
 //        debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         
     }
@@ -55,13 +66,31 @@ class Logger
     public function debugMe(string $txt): void
     {
         if ($this->debug) {
-            echo $this->addDebugInfoToText("debugMe: ".$txt);
+            if ($this->logfileHandle) {
+                fwrite($this->logfileHandle, $this->addDebugInfoToText("debugMe: ".$txt));
+            } else {
+                echo $this->addDebugInfoToText("debugMe: ".$txt);
+            }
         }
+    }
+
+    public function Info(string $txt): void
+    {
+        if ($this->logfileHandle) {
+            fwrite($this->logfileHandle, $this->addDebugInfoToText("Info: ".$txt));
+        } else {
+            echo $this->addDebugInfoToText("Info: ".$txt);
+        }
+        
     }
 
     public function Error(string $txt): void
     {
-        echo $this->addDebugInfoToText("Error: ".$txt);
+        if ($this->logfileHandle) {
+            fwrite($this->logfileHandle, $this->addDebugInfoToText("Error: ".$txt));
+        } else {
+            echo $this->addDebugInfoToText("Error: ".$txt);
+        }
     }
     public function isDebug(): bool
     {
