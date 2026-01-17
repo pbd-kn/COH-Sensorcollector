@@ -151,6 +151,11 @@ function insertOrTouchHistory(mysqli $db, string $sensorID, int $tstamp, string 
         $stmt->close();
 
         $curValTrim = trim($sensorValue);
+        if ($curValTrim === '') {
+            $logger->debugMe("Skip history insert: empty value for sensorID=$sensorID");
+            $db->commit();
+            return;
+        }        
 
         if ($hasLast && $lastValTrim === $curValTrim) {
             // gleicher Wert -> nur tstamp anheben
@@ -167,6 +172,7 @@ function insertOrTouchHistory(mysqli $db, string $sensorID, int $tstamp, string 
             $logger->debugMe("Touch history: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
         } else {
             // neuer Wert -> INSERT
+
             $ins = "INSERT INTO tl_coh_sensorvalue
                        (tstamp, sensorID, sensorValue, sensorEinheit, sensorValueType, sensorSource)
                     VALUES (?, ?, ?, ?, ?, ?)";
@@ -179,7 +185,7 @@ function insertOrTouchHistory(mysqli $db, string $sensorID, int $tstamp, string 
                 throw new \RuntimeException("exec(insert hist) failed: " . $stmtI->error);
             }
             $stmtI->close();
-            $logger->debugMe("Insert history: sensorID=$sensorID, tstamp=$tstamp, value='$sensorValue'");
+            $logger->debugMe("Insert history: sensorID=$sensorID, tstamp=$tstamp, value=[" . var_export($sensorValue, true) . "]");
         }
 
         $db->commit();
