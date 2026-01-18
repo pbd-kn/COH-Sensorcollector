@@ -1,0 +1,16 @@
+[Unit]
+Description=Sensor Data Collector
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+User=peter
+Type=simple
+WorkingDirectory=/home/peter/scripts/coh/sensorcollect
+ExecStart=/usr/bin/php /home/peter/scripts/coh/sensorcollect/collect.php
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+

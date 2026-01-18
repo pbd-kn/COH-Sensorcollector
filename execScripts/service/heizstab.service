@@ -1,0 +1,17 @@
+[Unit]
+Description=Start Heizstab Steuerung
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/peter/scripts/coh/execScripts
+ExecStart=/usr/bin/php /home/peter/scripts/coh/execScripts/json-heizung.php
+StandardOutput=append:/home/peter/coh/logs/heizstabserver.log
+StandardError=append:/home/peter/coh/logs/heizstabserver.log
+Restart=always
+User=peter
+Group=peter
+
+[Install]
+WantedBy=multi-user.target
+

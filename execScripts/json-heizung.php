@@ -11,14 +11,12 @@
 
 
 // als Globale Daten verwenden
-//include('mysql_dialog.php');
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
 //$urlSOC=$urlIQbox."sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge";
 $paramsFile = 'task_heizstab_params.json';   // dateiname der Parameter
-$cookieFile = '/home/peter/coh/cookies/iqbox_cookie.txt';                   // speichern des auth zugriffs auf d
-//$cookieFile = __DIR__ . "/ampere_cookie.txt";
-echo "cookieFile $cookieFile\n";
+$cookieFile = '/home/peter/scripts/coh/cookies/heizung_iqbox_cookie.txt';                   // speichern des auth zugriffs auf d
+//echo "cookieFile $cookieFile\n";
 $logfile="";
 $logfileHandle;
 $aktData = getdata();
@@ -36,6 +34,10 @@ function ampereLogin(string $urlIQbox): void
 {
     global $cookieFile;
 
+// Altes Cookie löschen (WICHTIG)
+    if (file_exists($cookieFile)) {
+        unlink($cookieFile);
+    }
     $username = "installer";
     $password = "sfjimorx"; 
     //writeLog ("ampereLogin urlIQbox $urlIQbox cookieFile $cookieFile");
@@ -57,6 +59,7 @@ function ampereLogin(string $urlIQbox): void
 
     if ($response === false) {
         writeLog ("!!!!!!!!!!!!!!!!!  response falseampereLogin urlIQbox $urlIQbox cookieFile $cookieFile");
+        curl_close($ch);
         throw new RuntimeException("Login failed: " . curl_error($ch));
     }
 
@@ -64,16 +67,20 @@ function ampereLogin(string $urlIQbox): void
     curl_close($ch);
 
     if (!in_array($code, [200, 302, 303], true)) {
+        writeLog ("ampereLogin Login HTTP error $code");
+
         throw new RuntimeException("Login HTTP error $code");
     }
+    //writeLog ("ampereLogin ok");
 }
 // base url enthält /rest/items
 function ampereRequest(string $baseUrl, string $path, bool $retry): array
 {
     global $urlIQbox,$cookieFile;
-    //writeLog ("ampereRequest  baseUrl $baseUrl path $path");
 
-    $ch = curl_init($baseUrl . $path);
+    $chUrl=$baseUrl . '/rest/items/' . $path;
+    //writeLog ("ampereRequest  chUrl $chUrl cookieFile $cookieFile");
+    $ch = curl_init($chUrl);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_COOKIEFILE     => $cookieFile,
@@ -82,7 +89,8 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
     ]);
     $response = curl_exec($ch);
     if ($response === false) {
-        writeLog ("ampereRequest  response false baseUrl $baseUrl path $path");
+        writeLog ("ampereRequest  response false chUrl $chUrl");
+        curl_close($ch);
         throw new RuntimeException("cURL error: " . curl_error($ch));
     }
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -90,11 +98,11 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
     //writeLog ("ampereRequest  code  $code baseUrl $baseUrl path $path");
     // Session ungültig → EINMAL neu einloggen
     if (in_array($code, [301, 302, 303, 401, 403, 404], true)) {
-        writeLog ("ampereRequest  Session ungültig EINMAL neu einloggen baseUrl $baseUrl path $path code $code");
+        writeLog ("ampereRequest  Session ungültig EINMAL neu einloggen chUrl $chUrl code $code");
         if ($retry) {
             throw new RuntimeException("Auth failed after retry (HTTP $code)");
         }
-        ampereLogin($urlIQbox);
+        ampereLogin($baseUrl);
         return ampereRequest($baseUrl, $path, true);
     }
     if ($code !== 200) {
@@ -119,7 +127,7 @@ function ampereGet(string $baseUrl, string $path): array
         //writeLog (" request ok");
         return $arr;
     } catch (Throwable $e) {
-        writeLog (" ampereGet request failed");
+        writeLog (" ampereGet request failed " . $e->getMessage());
         return [
             "ok"        => false,
             "error"     => true,
@@ -377,13 +385,6 @@ function writeLog($txt) {
 }
 
 
-/*
-$fileHandle = fopen($paramsFile, 'a');   append an file
-if ($fileHandle) {
-    fwrite($fileHandle, json_encode($params));
-    fclose($fileHandle);
-} 
-*/
 $iteration = 0;
 
 while (true) { //endlos Schleife wird mit break abgebrochen
@@ -419,7 +420,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
         } 
         if (isset($params['urlIQbox'])) {
 //            writeLog("urlIQbox  " . $params['urlIQbox'] . "");
-            $urlIQbox="http://".$params['urlIQbox'].'/rest/items/';
+            $urlIQbox="http://".$params['urlIQbox'];
 //            $urlSOC=$urlIQbox."sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge";             // Füllstand Batterie
         }                
         if (isset($params['repeat'])) {
@@ -437,6 +438,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
 
 
   // zuerst überprüfen, ob schon Boostmodus läuft.
+  date_default_timezone_set('Europe/Berlin');
   $aktData = getdata();
   $setupData = getsetup();
 
@@ -458,7 +460,6 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   //writeLog("gelesen temperatur $wwTemp");
   $SOCArr=explode(" ",getfromIQbox("sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge")); // Abrufen des Inhalts der SOC  Batterie Füllstand   
   $stateBatterie = intval( $SOCArr[0]); // Fuellstand Batterie als int prozentwert
-  date_default_timezone_set('Europe/Berlin');
   $currentTime = date('d.m.Y H:i:s');
   writeLog("currentTime $currentTime");
 
