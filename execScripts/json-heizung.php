@@ -8,8 +8,12 @@
 // ps aux | grep json-heizung
 // kill (erste Zahl aus dem ergebnis
 
-
-
+require_once __DIR__ . '/Logger.php';
+$debug=true;
+$logger = new Logger();
+$logger->setLogfile ("/home/peter/coh/logs/heizstabserver.log");
+$logger->setDebug($debug);
+$logger->Info("Restart json-heizung");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
@@ -32,7 +36,7 @@ $repeat = 2;      // whileSchleife alle 15 Min
 
 function ampereLogin(string $urlIQbox): void
 {
-    global $cookieFile;
+    global $cookieFile,$logger;
 
 // Altes Cookie löschen (WICHTIG)
     if (file_exists($cookieFile)) {
@@ -58,7 +62,7 @@ function ampereLogin(string $urlIQbox): void
     $response = curl_exec($ch);
 
     if ($response === false) {
-        writeLog ("!!!!!!!!!!!!!!!!!  response falseampereLogin urlIQbox $urlIQbox cookieFile $cookieFile");
+        $logger->Error ("response ampereLogin false urlIQbox $urlIQbox cookieFile $cookieFile");
         curl_close($ch);
         throw new RuntimeException("Login failed: " . curl_error($ch));
     }
@@ -67,7 +71,7 @@ function ampereLogin(string $urlIQbox): void
     curl_close($ch);
 
     if (!in_array($code, [200, 302, 303], true)) {
-        writeLog ("ampereLogin Login HTTP error $code");
+        $logger->Error  ("ampereLogin Login HTTP error $code");
 
         throw new RuntimeException("Login HTTP error $code");
     }
@@ -76,7 +80,7 @@ function ampereLogin(string $urlIQbox): void
 // base url enthält /rest/items
 function ampereRequest(string $baseUrl, string $path, bool $retry): array
 {
-    global $urlIQbox,$cookieFile;
+    global $urlIQbox,$cookieFile,$logger;
 
     $chUrl=$baseUrl . '/rest/items/' . $path;
     //writeLog ("ampereRequest  chUrl $chUrl cookieFile $cookieFile");
@@ -89,7 +93,7 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
     ]);
     $response = curl_exec($ch);
     if ($response === false) {
-        writeLog ("ampereRequest  response false chUrl $chUrl");
+        $logger->Error  ("ampereRequest  response false chUrl $chUrl");
         curl_close($ch);
         throw new RuntimeException("cURL error: " . curl_error($ch));
     }
@@ -98,14 +102,16 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
     //writeLog ("ampereRequest  code  $code baseUrl $baseUrl path $path");
     // Session ungültig → EINMAL neu einloggen
     if (in_array($code, [301, 302, 303, 401, 403, 404], true)) {
-        writeLog ("ampereRequest  Session ungültig EINMAL neu einloggen chUrl $chUrl code $code");
+        $logger->Error  ("ampereRequest  Session ungültig EINMAL neu einloggen chUrl $chUrl code $code");
         if ($retry) {
+            $logger->Error("ampereRequest Session ungültig zweimal falsch Exception chUrl $chUrl code $code");
             throw new RuntimeException("Auth failed after retry (HTTP $code)");
         }
         ampereLogin($baseUrl);
         return ampereRequest($baseUrl, $path, true);
     }
     if ($code !== 200) {
+        $logger->Error("ampereRequest code nicht 200 Exception chUrl $chUrl code $code");
         throw new RuntimeException("HTTP error $code");
     } 
     $json = json_decode($response, true);
@@ -121,13 +127,14 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
 // liefert die jsondaten der iq Box. macht evtl eine reauth
 function ampereGet(string $baseUrl, string $path): array
 {
+    global $logger;
     //writeLog ("ampereGet  baseUrl $baseUrl path $path");
     try {
         $arr=ampereRequest($baseUrl, $path, false);
         //writeLog (" request ok");
         return $arr;
     } catch (Throwable $e) {
-        writeLog (" ampereGet request failed " . $e->getMessage());
+        $logger->Error (" ampereGet request failed baseUrl $baseUrl path $path " . $e->getMessage());
         return [
             "ok"        => false,
             "error"     => true,
@@ -142,49 +149,49 @@ function ampereGet(string $baseUrl, string $path): array
 // liest die data.jsn vom Heizstab und gibt sie als Array zurück
 // liefert False bei einem Fehler
 function getdata() {
-    global $urlheizStab;
+    global $urlheizStab,$logger;
     $url=$urlheizStab."data.jsn";
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        writeLog("!!! cURL Error: " . curl_error($ch)." url: $url"); 
+        $logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
       $data = json_decode($content,true);
       if ($data === null) {
-        writeLog("!!! Fehler beim Parsen der JSON-Daten des Heizstabes  url $url");
+        $logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes  url $url");
         sleep(10); // Warte 10 sec
         continue;
       }
       return $data;
     }
-    writeLog("!!! Fehler nach 10 maligen Aufruf");
+    $logger->Error("!!! Fehler nach 10 maligen Aufruf");
     return false;
 }
 // liest die setup.jsn vom Heizstab und gibt sie als Array zurück
 // liefert False bei einem Fehler
 
 function getsetup() {
-    global $urlheizStab;
+    global $urlheizStab,$logger;
     $url=$urlheizStab."setup.jsn";
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        writeLog("!!! cURL Error: " . curl_error($ch)." url: $url"); 
+        $logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
-      if ($content === false) {writeLog("!!! cURL Error: " . curl_error($ch)." url: $url"); return false;}
+      if ($content === false) {$logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); return false;}
       $data = json_decode($content,true);
       if ($data === null) {
-        writeLog("!!! Fehler beim Parsen der JSON-Daten des Heizstabes url $url");
+        $logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes url $url");
         sleep(10); // Warte 10 sec
         continue;
       }
       return $data;
     }
-    writeLog("!!! Fehler nach 10 maligen Aufruf");
+    $logger->Error("!!! Fehler nach 10 maligen Aufruf");
     return false;
 }
 
@@ -192,7 +199,7 @@ function getsetup() {
  *  
  */
 function getHeizstabdata ($data) {
-  global $aktData,$setupData;
+  global $aktData,$setupData,$logger;
   if (isset($aktData[$data]) )  {  return $aktData[$data];}    
   else if (isset($setupData[$data]) )  {  return $setupData[$data];}    
   else return false;
@@ -203,20 +210,21 @@ function getHeizstabdata ($data) {
  *
  */
 function getfromIQbox ($path) {
-  global $urlIQbox;
+  global $urlIQbox,$logger;
     $result = ampereGet($urlIQbox,$path);
     if ($result['ok']) {
       $data = json_decode((string)$result['data'],true);
       $state=$data['state'];  
       return $state;
     } else {
-      writeLog ("!!! Fehler beim Abrufen der Daten von: $urlIQbox var: $path");
+      $logger->Error("!!! Fehler beim Abrufen der Daten von: $urlIQbox var: $path");
       return false;
     }
 }
 
 // CURL-Request Funktion, um Redundanz zu vermeiden
 function curlRequest($url) {
+    global $logger;
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -224,7 +232,7 @@ function curlRequest($url) {
 
     $content = curl_exec($ch);
     if ($content === false) {
-        writeLog("!!! cURL Error: " . curl_error($ch) . " url: $url");
+        $logger->Error("!!! cURL Error: " . curl_error($ch) . " url: $url");
         curl_close($ch);
         return false;
     }
@@ -249,7 +257,7 @@ function heizen($modus) {
   // steuerungseinstellung bestimmen wie
   // aktuell wird der Boost für Warmwassereinstellung verwendet
   //setup.jsn?bstmode=0
-  global $urlheizStab,$ctrl;
+  global $urlheizStab,$ctrl,$logger;
   $steuerungseinstellung=$ctrl;    
     $url1 = $url2 = "";
   if ($steuerungseinstellung==1) {           // http
@@ -263,14 +271,14 @@ function heizen($modus) {
       $url2=$urlheizStab.'data.jsn?bststrt=0';
     }
   }
-  writeLog("Heizen Modus Heizstab $modus Protokoll url1: $url1 url2: $url2");
+  $logger->debugMe("Heizen Modus Heizstab $modus Protokoll url1: $url1 url2: $url2");
   //$response=@file_get_contents($urlheizStab.'data.jsn?bststrt=1');
   if ($url1 && $url2) {
         $response1 = curlRequest($url1);
         sleep(1); // Warte 1 sec
         $response2 = curlRequest($url2);
         if ($response1 === false || $response2 === false) {
-            writeLog("!!! Fehler beim Heizen-Steuerungsbefehl: $modus");
+            $logger->Error("!!! Fehler beim Heizen-Steuerungsbefehl: $modus");
             return false;
         }
   }
@@ -379,9 +387,8 @@ function IQTemp($stat) {   // Temp z.b Batterie
   return $resArr;
 }
 function writeLog($txt) {
-  global $logfileHandle;
-  if (isset($logfileHandle)) fwrite($logfileHandle, $txt."\n");
-  else echo($txt."\n");
+  global $logger;
+  $logger->debugMe($txt);
 }
 
 
@@ -410,8 +417,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
         }
 
         if (isset($params['stop']) && $params['stop'] === true) {
-            writeLog("Task stopped by parameter.");
-            echo "Task stopped by parameter.";
+            $logger->Info("Task stopped by parameter.");            echo "Task stopped by parameter.";
             break;
         }
         if (isset($params['urlheizStab'])) {
@@ -445,7 +451,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   $ctrl = getHeizstabdata('ctrl');   // ansteuerungstyp 1 = http 2 = modbusdTCP s. Doku fußnote 1         
 
   $Booststat = getHeizstabdata('boostactive');  // musss evtl noch korrigiert werden, wenn http modus eingestellt ist
-  if ($Booststat === false) { writeLog("!!! Fehler lesen Heizstab Booststat false"); echo "Fehler lesen Heizstab Booststat false\n"; goto nextIteration;}                                    
+  if ($Booststat === false) { $logger->Error("!!! Fehler lesen Heizstab Booststat false"); echo "Fehler lesen Heizstab Booststat false\n"; goto nextIteration;}                                    
   $getMaxPwr = getHeizstabdata('maxpwr'); 
   $getAktPwr=getHeizstabdata('power_elwa2');
   $getMinTemp=getHeizstabdata('ww1boost')/10;
@@ -461,9 +467,9 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   $SOCArr=explode(" ",getfromIQbox("sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge")); // Abrufen des Inhalts der SOC  Batterie Füllstand   
   $stateBatterie = intval( $SOCArr[0]); // Fuellstand Batterie als int prozentwert
   $currentTime = date('d.m.Y H:i:s');
-  writeLog("currentTime $currentTime");
+  //$logger->Info("currentTime $currentTime");
 
-  writeLog("maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C temp von IQBox $wwTemp C  Batterie $stateBatterie %");   // soweit wird geheizt     
+  $logger->debugMe("currentTime $currentTime maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C temp von IQBox $wwTemp C  Batterie $stateBatterie %");   // soweit wird geheizt     
   // überprüfen ob die akt. Zeit innerhalb des Intervalls ist
   $pruefeHeizen=0;
   $cTime = date('H:i');    // zur Intervall Prüfung
@@ -473,11 +479,11 @@ while (true) { //endlos Schleife wird mit break abgebrochen
     $isWithinInterval = ($cTime >= $interval['an']) && ($cTime <= $interval['aus']);
     if ($isWithinInterval) {
       $pruefeHeizen=1;
-      writeLog("Heizung prüfen im intervall [$intervallIndex] ok an: ".$interval['an']." aus: ".$interval['aus']."");
+      $logger->Info("Heizung prüfen im intervall [$intervallIndex] ok an: ".$interval['an']." aus: ".$interval['aus']."");
       break;
     }
   }
-  writeLog("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterie");
+  $logger->debugMe("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterie");
 
   if ( $stateBatterie < 10 ) { $hysterese=$hystereseSoll; }
   if (($hysterese >0) && ($stateBatterie > $hystereseSoll)) $hysterese=0;    // zurücksetzen
@@ -485,7 +491,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
 //      writeLog("Heizstab heizt schon Booststat $Booststat hysterese $hysterese test auf ausschalten"); 
     if ($hysterese != 0 && ($stateBatterie < 10 || $stateBatterie < $hystereseSoll)) {  // Hysterese Modus warten bis hystereseSoll erreicht 
       heizen(0) ; 
-      writeLog("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  warten auf hysterese"); 
+      $logger->Info("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  warten auf hysterese"); 
       goto nextIteration;      
     }
   } 
@@ -493,31 +499,31 @@ while (true) { //endlos Schleife wird mit break abgebrochen
     if ($Booststat == 0) {      // innerhalb intervall und heizt noch nicht
     // Untersuchung auf Heizen
         if ($stateBatterie > 20) {      
-          writeLog("Füllstand Batterie $stateBatterie Größer 20 % evtl. Heizen hysterese $hysterese");    
+          $logger->debugMe("Füllstand Batterie $stateBatterie Größer 20 % evtl. Heizen hysterese $hysterese");    
           if ($hysterese == 0 || $stateBatterie > $hysterese) {    // starten wenn nicht auf hysterese warten oder hysterese erreicht 
-            writeLog("heizstab einschalten SOC = $stateBatterie hysterese $hysterese");
+            $logger->Info("heizstab einschalten SOC = $stateBatterie hysterese $hysterese");
             heizen(1);
             if ($stateBatterie < $hystereseSoll) {   // hysterese einschalten
               $hysterese= $hystereseSoll;     // ab jetzt warten bis Füllstand Batterie $hystereseSoll erreicht
-              writeLog("Hysterese eingeschaltet ");
+              $logger->Info("Hysterese einschalten ");
             }
             else  $hysterese= 0;             // alles ok Batterie ist voll genug
-          } else writeLog("Auf Hysterese warten hysterese $hysterese ");
-        } else writeLog("Auf Hysterese warten hysterese $hysterese stateBatterie $stateBatterie"); 
+          } else $logger->debugMe("Auf Hysterese warten hysterese $hysterese ");
+        } else $logger->debugMe("Auf Hysterese warten hysterese $hysterese stateBatterie $stateBatterie"); 
     } else {   // heizt schon überprüfen ob heizen stop wegen Batterie
       if ($stateBatterie < 10) {
           $hysterese= $hystereseSoll;     // ab jetzt warten bis Füllstand Batterie $hystereseSoll erreicht
           heizen(0) ; 
-          writeLog("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  Batterie<10%");
+          $logger->Info("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  Batterie<10%");
       }
     }
     $sleepTime=$repeat*60;  
   } else { // Ende Untersuchung Heizen
-    writeLog("Außerhalb Intervall");
+    $logger->debugMe("currentTime $currentTime Außerhalb Intervall ");
     // ausserhalb intervall
     if ($Booststat != 0) {  // heizt noch
         heizen(0) ; 
-        writeLog("heizstab ausschalten Intervall Ende");
+        $logger->Info("heizstab ausschalten Intervall Ende");
         echo "heizen aus Intervall Ende\n";
     }
     // check nächstes Intervall Bestimmung sleepTime
@@ -529,7 +535,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
       $isWithinInterval = ($interval['an'] >= $cTime) || ($cTime >= $interval['an']);   // entweder heute noch oder morgen
       if ($isWithinInterval) {
         $nextAn=$interval['an'];
-        writeLog("Nächstes Intervall Beginn an: ".$interval['an']);
+        $logger->Info("Nächstes Intervall Beginn an: ".$interval['an']  .   " aus ". $interval['aus']);
         break;
       }
     }
@@ -564,11 +570,11 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   $currentDateTime = new DateTime();
   $currentDateTime->add(new DateInterval('PT' . $sleepTime . 'S'));
   $w=$currentDateTime->format('Y-m-d H:i:s');
-  writeLog(date('d.m.Y H:i:s')." iteration: $iteration sleepTime $sleepTime sec sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n");
+  $logger->Info(date('d.m.Y H:i:s')." iteration: $iteration sleepTime $sleepTime sec sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n");
   if (isset($logfileHandle)) fclose($logfileHandle);
   $logfile="";
   unset($logfileHandle);
-  echo date('d.m.Y H:i:s')." iteration: $iteration sleepTime $sleepTime sec sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n";
+  //echo date('d.m.Y H:i:s')." iteration: $iteration sleepTime $sleepTime sec sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n";
 
   sleep($sleepTime); // Warte Repeat Minuten pro Iteration
   
