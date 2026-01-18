@@ -17,10 +17,9 @@ $logger->Info("Restart json-heizung");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
-//$urlSOC=$urlIQbox."sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge";
 $paramsFile = 'task_heizstab_params.json';   // dateiname der Parameter
 $cookieFile = '/home/peter/scripts/coh/cookies/heizung_iqbox_cookie.txt';                   // speichern des auth zugriffs auf d
-//echo "cookieFile $cookieFile\n";
+
 $logfile="";
 $logfileHandle;
 $aktData = getdata();
@@ -99,7 +98,6 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
     }
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    //writeLog ("ampereRequest  code  $code baseUrl $baseUrl path $path");
     // Session ungültig → EINMAL neu einloggen
     if (in_array($code, [301, 302, 303, 401, 403, 404], true)) {
         $logger->Error  ("ampereRequest  Session ungültig EINMAL neu einloggen chUrl $chUrl code $code");
@@ -421,13 +419,10 @@ while (true) { //endlos Schleife wird mit break abgebrochen
             break;
         }
         if (isset($params['urlheizStab'])) {
-//            writeLog("urlheizStab  " . $params['urlheizStab'] . "");
             $urlheizStab="http://".$params['urlheizStab'].'/';
         } 
         if (isset($params['urlIQbox'])) {
-//            writeLog("urlIQbox  " . $params['urlIQbox'] . "");
             $urlIQbox="http://".$params['urlIQbox'];
-//            $urlSOC=$urlIQbox."sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge";             // Füllstand Batterie
         }                
         if (isset($params['repeat'])) {
             //writeLog("repeat  alle " . $params['repeat'] . "Min");
@@ -436,6 +431,9 @@ while (true) { //endlos Schleife wird mit break abgebrochen
         if (isset($params['Heizintervalle'])) {   //  in die Datenbank zu schreibenden werte
             $heizIntervalle = $params['Heizintervalle'];
             //writeLog("heizIntervale gelesen: ");
+        }                
+        if (isset($params['debug'])) {
+            $debug=$params['debug'];
         }                
   } else {
     echo "kein paramsfiel $paramsFile\n";
