@@ -9,7 +9,7 @@
 // kill (erste Zahl aus dem ergebnis
 
 require_once __DIR__ . '/Logger.php';
-$debug=true;
+$debug=false;
 $logger = new Logger();
 $logger->setLogfile ("/home/peter/coh/logs/heizstabserver.log");
 $logger->setDebug($debug);
