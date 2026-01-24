@@ -10,10 +10,11 @@
 
 require_once __DIR__ . '/Logger.php';
 $debug=false;
+$logf="/home/peter/coh/logs/heizstabserver.log";
 $logger = new Logger();
-$logger->setLogfile ("/home/peter/coh/logs/heizstabserver.log");
+$logger->setLogfile ($logf);
 $logger->setDebug($debug);
-$logger->Info("Restart json-heizung");
+$logger->Info("Restart json-heizung Logfile $logf");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
@@ -259,6 +260,7 @@ function heizen($modus) {
   $steuerungseinstellung=$ctrl;    
     $url1 = $url2 = "";
   if ($steuerungseinstellung==1) {           // http
+    $logger->Info("Heizen Modus Heizstab $modus Protokoll $steuerungseinstellung bei http nichts tun");
     return false;
   } else if ($steuerungseinstellung==2) {           // modbustcp
     if ($modus > 0) {
@@ -269,7 +271,7 @@ function heizen($modus) {
       $url2=$urlheizStab.'data.jsn?bststrt=0';
     }
   }
-  $logger->debugMe("Heizen Modus Heizstab $modus Protokoll url1: $url1 url2: $url2");
+  $logger->Info("Heizen Modus Heizstab $modus Protokoll $steuerungseinstellung url1: $url1 url2: $url2");
   //$response=@file_get_contents($urlheizStab.'data.jsn?bststrt=1');
   if ($url1 && $url2) {
         $response1 = curlRequest($url1);

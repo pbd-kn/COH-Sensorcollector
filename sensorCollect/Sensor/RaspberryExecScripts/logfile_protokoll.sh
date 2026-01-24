@@ -7,5 +7,6 @@
 #
 #!/bin/bash
 # Dieses Skript liest die letzten 5 Einträge aus der Logdatei, die "openhab" enthalten
-grep -i -e "Info" -e "error" /home/peter/coh/logs/heizstabserver.log | tail -n 5
+tail -n 10 /home/peter/coh/logs/heizstabserver.log | grep -i -e "Info" -e "error" || echo "Keine Treffer"
+
 
