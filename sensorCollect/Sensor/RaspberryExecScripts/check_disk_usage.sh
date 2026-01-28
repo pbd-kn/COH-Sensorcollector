@@ -1,6 +1,6 @@
 #!/bin/bash
 LIMIT=70
-LOGFILE="/var/log/check_disk_usage.log"
+LOGFILE="/home/peter/coh/logs/check_disk_usage.log"
 PART="/dev/mmcblk0p2"
 TO="pbd@gmx.de"
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOGFILE="/var/log/coh/sensor.collect.log"
+LOGFILE="/home/peter/coh/logs/sensor-collect.log"
 SERVICE="collect.service"
 
 OUTPUT=""
