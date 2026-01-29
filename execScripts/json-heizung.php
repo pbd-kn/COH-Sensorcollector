@@ -14,12 +14,12 @@ $logf="/home/peter/coh/logs/heizstabserver.log";
 $logger = new Logger();
 $logger->setLogfile ($logf);
 $logger->setDebug($debug);
-$logger->Info("Restart json-heizung Logfile $logf");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
-$paramsFile = 'task_heizstab_params.json';   // dateiname der Parameter
+$paramsFile = '/home/peter/scripts/coh/execScripts/task_heizstab_params.json';   // dateiname der Parameter
 $cookieFile = '/home/peter/scripts/coh/cookies/heizung_iqbox_cookie.txt';                   // speichern des auth zugriffs auf d
+$logger->Info("Restart json-heizung Logfile $logf paramsFile $paramsFile");
 
 $logfile="";
 $logfileHandle;
@@ -238,6 +238,12 @@ function curlRequest($url) {
     curl_close($ch);
     return $content;
 }
+function timeToMinutes(string $time): int
+{
+    [$h, $m] = array_map('intval', explode(':', $time));  // dient zum intervalvergleich
+    return $h * 60 + $m;
+}
+
 
 /* startet oder stopt den Heizstab
  * 
@@ -476,7 +482,10 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   date_default_timezone_set('Europe/Berlin');
   
   foreach ($heizIntervalle as $intervallIndex=>$interval) {
-    $isWithinInterval = ($cTime >= $interval['an']) && ($cTime <= $interval['aus']);
+    $cTimeMin = timeToMinutes($cTime);
+    $intervalAnMin = timeToMinutes($interval['an']);
+    $intervalAusMin = timeToMinutes($interval['aus']);
+    $isWithinInterval = ($cTimeMin >= $intervalAnMin) && ($cTimeMin <= $intervalAusMin);
     if ($isWithinInterval) {
       $pruefeHeizen=1;
       $logger->Info("Heizung prüfen im intervall [$intervallIndex] ok an: ".$interval['an']." aus: ".$interval['aus']."");
@@ -488,7 +497,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   if ( $stateBatterie < 10 ) { $hysterese=$hystereseSoll; }
   if (($hysterese >0) && ($stateBatterie > $hystereseSoll)) $hysterese=0;    // zurücksetzen
   if ($Booststat != 0) {  // heizstab an
-//      writeLog("Heizstab heizt schon Booststat $Booststat hysterese $hysterese test auf ausschalten"); 
+    $logger->Info("heizstab heizung läuft noch"); 
     if ($hysterese != 0 && ($stateBatterie < 10 || $stateBatterie < $hystereseSoll)) {  // Hysterese Modus warten bis hystereseSoll erreicht 
       heizen(0) ; 
       $logger->Info("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  warten auf hysterese"); 
@@ -524,20 +533,21 @@ while (true) { //endlos Schleife wird mit break abgebrochen
     if ($Booststat != 0) {  // heizt noch
         heizen(0) ; 
         $logger->Info("heizstab ausschalten Intervall Ende");
-        echo "heizen aus Intervall Ende\n";
+        //echo "heizen aus Intervall Ende\n";
     }
     // check nächstes Intervall Bestimmung sleepTime
-    $nextAn="";
-//echo "cTime $cTime\n";
-    foreach ($heizIntervalle as $intervallIndex=>$interval) {
-//echo "interval['an'] ".$interval['an']."\n";
-
-      $isWithinInterval = ($interval['an'] >= $cTime) || ($cTime >= $interval['an']);   // entweder heute noch oder morgen
-      if ($isWithinInterval) {
-        $nextAn=$interval['an'];
-        $logger->Info("Nächstes Intervall Beginn an: ".$interval['an']  .   " aus ". $interval['aus']);
-        break;
-      }
+    $nextAn = null;
+    foreach ($heizIntervalle as $interval) {    /** Heute noch ?? */
+        $intervalAnMin = timeToMinutes($interval['an']);
+        if ($intervalAnMin > $cTimeMin) {
+            $nextAn = $interval['an'];
+            $logger->Info("Nächstes Intervall HEUTE: {$interval['an']} bis {$interval['aus']}");
+            break;
+        }
+    }
+    if ($nextAn === null && !empty($heizIntervalle)) {    /** Morgen (erstes Intervall) */
+        $nextAn = $heizIntervalle[0]['an'];
+        $logger->Info("Nächstes Intervall MORGEN: {$heizIntervalle[0]['an']} bis {$heizIntervalle[0]['aus']}");
     }
 //echo "nextAn $nextAn\n";
     if ($nextAn!="") {
@@ -557,7 +567,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
       // Schlafen, bis die Zielzeit erreicht ist maximal 1 Stunde(aber nur, wenn die Differenz positiv ist)
 //echo "diffsec $$diffInSekunden\n";
       if ($diffInSekunden > 0) {
-        if ($diffInSekunden > 3600)$sleepTime=3600;  // 1 stunde warten
+        if ($diffInSekunden > 3600) $sleepTime=$diffInSekunden+10;   // warten bis im Intervall  warten
         else $sleepTime=$diffInSekunden+10;          // 10 sec länger, damit sicherr im Intervall
       } else {
         $sleepTime=$repeat*60;

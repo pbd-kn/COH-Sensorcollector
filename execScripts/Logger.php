@@ -48,7 +48,7 @@ class Logger
     {
         if ($this->debug) {
             if ($this->logfileHandle) {
-                fwrite($this->logfileHandle, $this->addDebugInfoToText("debugMe: ".$txt));
+                fwrite($this->logfileHandle, $this->addDebugInfoToText($txt));
             } else {
                 echo $this->addDebugInfoToText("debugMe: ".$txt);
             }
@@ -58,7 +58,7 @@ class Logger
     public function Info(string $txt): void
     {
         if ($this->logfileHandle) {
-            fwrite($this->logfileHandle, $this->addDebugInfoToText("Info: ".$txt));
+            fwrite($this->logfileHandle, $this->addDebugInfoToText($txt));
         } else {
             echo $this->addDebugInfoToText("Info: ".$txt);
         }
@@ -68,7 +68,7 @@ class Logger
     public function Error(string $txt): void
     {
         if ($this->logfileHandle) {
-            fwrite($this->logfileHandle, $this->addDebugInfoToText("Error: ".$txt));
+            fwrite($this->logfileHandle, $this->addDebugInfoToText($txt));
         } else {
             echo $this->addDebugInfoToText("Error: ".$txt);
         }
