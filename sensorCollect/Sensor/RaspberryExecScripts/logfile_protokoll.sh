@@ -1,13 +1,18 @@
 #!/bin/bash
 # 
-# Dieses File /home/peter/scripts/coh/sensorcollect/Sensor/RapberrryExecScripts/logfile_protokoll.sh wird von der thingsdatei Protokoll logdatei
-# /etc/openhab/things/exec.things regelmässig aufgerufen und liefert ob ein Fehler aufgetreten ist.
-# es überwacht die log-auschreibe des Heizungsstabs
+# Dieses File /home/peter/scripts/coh/sensorcollect/Sensor/RapberrryExecScripts/logfile_protokoll.sh 
+# es liefert die log-auschreibe des Heizungsstabs
 # chmod +x /home/peter/scripts/logfile_protokoll.sh
 #
 #!/bin/bash
-# Dieses Skript liest die letzten 5 Einträge aus der Logdatei, die "openhab" enthalten
-tail -n 100 /home/peter/coh/logs/heizstabserver.log | grep -i -e "Info" -e "error" | tail -n 9 || echo "Keine Treffer"
+# Dieses Skript liest die letzten 9 Einträge aus der Logdatei, die "openhab" enthalten
+OUT=$(grep -i -e "Info" -e "error" /home/peter/coh/logs/heizstabserver.log | tail -n 9)
+
+if [ -z "$OUT" ]; then
+    echo "Info: Datei /home/peter/coh/logs/heizstabserver.log ist leer (wg. rotate)"
+else
+    echo "$OUT"
+fi
 
 
 
