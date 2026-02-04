@@ -154,6 +154,7 @@ fi
 ############################
 echo "[4/9] Zero-Fill (best effort) derzeit nicht aktiv"
 #(
+#  Dummyfile .zero.fill wird bis zur filesysatemgentze mit 0 gefüllt und danach gelöscht. damit wird das gzip-file mit dem sd-karten-backup nicht zu groß
 #  set +e
 #  sudo -n dd if=/dev/zero of="$BACKUP_DIR/.zero.fill" bs=1M status=none
 #  sync
