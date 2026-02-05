@@ -58,7 +58,7 @@ class Logger
     public function Info(string $txt): void
     {
         if ($this->logfileHandle) {
-            fwrite($this->logfileHandle, $this->addDebugInfoToText($txt));
+            fwrite($this->logfileHandle, $this->addDebugInfoToText($txt,false));
         } else {
             echo $this->addDebugInfoToText("Info: ".$txt);
         }
@@ -68,7 +68,7 @@ class Logger
     public function Error(string $txt): void
     {
         if ($this->logfileHandle) {
-            fwrite($this->logfileHandle, $this->addDebugInfoToText($txt));
+            fwrite($this->logfileHandle, $this->addDebugInfoToText($txt,false));
         } else {
             echo $this->addDebugInfoToText("Error: ".$txt);
         }
@@ -81,22 +81,24 @@ class Logger
     /* füege modul funktion und zeile dazu
      *
      */
-    private function addDebugInfoToText(string $text): string
+    private function addDebugInfoToText(string $text, bool $full): string
     {
         // Hole den aktuellen Stack-Trace und extrahiere Informationen
+        $cTime = date('H:i');    // akt. Zeit
         $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
         $caller = $backtrace[1];
 
         // Extrahiere den Dateinamen und die Zeilennummer
         $file = isset($caller['file']) ? $caller['file'] : 'unknown file';
         $line = isset($caller['line']) ? $caller['line'] : 'unknown line';
-
         // Extrahiere den Funktionsnamen
         $function = isset($caller['function']) ? $caller['function'] : 'unknown function';
-
-        // Baue den Log-Text mit dem Modulnamen (Dateiname, Zeilennummer und Funktionsname) zusammen
-        $logInfo = sprintf('[%s:%d] %s : %s', basename($file), $line, $function, $text);
-
+        if ($full) {   // ausgabe Zeit, Dateiname, Zeilennummer und Funktionsname
+            // Baue den Log-Text mit dem Modulnamen (Dateiname, Zeilennummer und Funktionsname) zusammen
+            $logInfo = sprintf('%s [%s:%d] %s : %s', $cTime, basename($file), $line, $function, $text);
+        } else {
+            $logInfo = sprintf('%s %s : %s', $cTime,  $function, $text);
+        }
         // Rückgabe des erweiterten Text
         return $logInfo."\n";
     }
