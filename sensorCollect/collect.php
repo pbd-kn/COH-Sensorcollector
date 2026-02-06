@@ -200,6 +200,7 @@ function insertOrTouchHistory(mysqli $db, string $sensorID, int $tstamp, string 
 // Main-Loop
 // ---------------------------------------------------------
 $iteration = 0;
+$logger->Info("Restart: " . date('d.m.Y H:i:s'));
 
 while (true) {
     $iteration++;
