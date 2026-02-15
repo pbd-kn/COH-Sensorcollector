@@ -488,7 +488,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
     $isWithinInterval = ($cTimeMin >= $intervalAnMin) && ($cTimeMin <= $intervalAusMin);
     if ($isWithinInterval) {
       $pruefeHeizen=1;
-      $logger->Info("Heizung prüfen im intervall [$intervallIndex] ok an: ".$interval['an']." aus: ".$interval['aus']."");
+//      $logger->Info("Heizung prüfen im intervall [$intervallIndex] ok an: ".$interval['an']." aus: ".$interval['aus']."");
       break;
     }
   }
@@ -549,7 +549,6 @@ while (true) { //endlos Schleife wird mit break abgebrochen
         $nextAn = $heizIntervalle[0]['an'];
         $logger->Info("Nächstes Intervall MORGEN: {$heizIntervalle[0]['an']} bis {$heizIntervalle[0]['aus']}");
     }
-//echo "nextAn $nextAn\n";
     if ($nextAn!="") {
       $arrTime=explode(':',$nextAn);
       $zielStunde = $arrTime[0];
