@@ -273,27 +273,37 @@ private function ampereRequest(string $path, bool $retry): array
         return $resArr;
     }  
 
-private function IQkWh($stat) {
-    $statearr = explode(" ", $stat ?? '');
-    $rawValue = $statearr[0] ?? '';
-    $unit = strtolower($statearr[1] ?? '');
+    private function IQkWh($stat) {
+        $resArr=[];
+        $valarr = explode("|", $stat ?? '');
+        if (count($valarr) > 1) {           // mit zeitangabe
+            // liefere den zeitpunkt der messung in sec
+            $unixzeit_ms=$valarr[0];
+            $unixzeit_sec=$unixzeit_ms/1000;    // Umwandeln in Sekunden (durch 1000 teilen, da die Unixzeit in Millisekunden gegeben ist)
+            $resArr['unixtime'] = $unixzeit_sec;
+            $strWert=$valarr[1];              
+        } else $strWert=$stat;
 
-    if (!is_numeric($rawValue)) {
-        $resArr['wert'] = 0;  // oder null, oder eine Fehlermeldung
+        $statearr = explode(" ", $strWert ?? '');
+        $rawValue = $statearr[0] ?? '';
+        $unit = strtolower($statearr[1] ?? '');
+
+        if (!is_numeric($rawValue)) {
+            $resArr['wert'] = 0;  // oder null, oder eine Fehlermeldung
+            $resArr['einheit'] = 'kWh';
+            return $resArr;
+        }
+
+        $value = match ($unit) {
+            'ws' => round($rawValue / 3600000, 2),
+            'wh' => round($rawValue / 1000, 2),
+            default => (float)$rawValue
+        };
+
+        $resArr['wert'] = $value;
         $resArr['einheit'] = 'kWh';
         return $resArr;
     }
-
-    $value = match ($unit) {
-        'ws' => round($rawValue / 3600000, 2),
-        'wh' => round($rawValue / 1000, 2),
-        default => (float)$rawValue
-    };
-
-    $resArr['wert'] = $value;
-    $resArr['einheit'] = 'kWh';
-    return $resArr;
-}
 
     private function IQkW($stat) {   // Angabe kW W
         $resArr=[];

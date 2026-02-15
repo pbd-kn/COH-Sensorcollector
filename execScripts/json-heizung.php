@@ -580,11 +580,10 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   $currentDateTime = new DateTime();
   $currentDateTime->add(new DateInterval('PT' . $sleepTime . 'S'));
   $w=$currentDateTime->format('Y-m-d H:i:s');
-  $logger->Info(date('d.m.Y H:i:s')." iteration: $iteration sleepTime $sleepTime sec sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n");
+  $logger->Info(date('d.m.Y H:i:s')." iteration: $iteration sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n");
   if (isset($logfileHandle)) fclose($logfileHandle);
   $logfile="";
   unset($logfileHandle);
-  //echo date('d.m.Y H:i:s')." iteration: $iteration sleepTime $sleepTime sec sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n";
 
   sleep($sleepTime); // Warte Repeat Minuten pro Iteration
   
