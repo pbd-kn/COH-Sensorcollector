@@ -520,7 +520,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
           } else $logger->debugMe("Auf Hysterese warten hysterese $hysterese ");
         } else $logger->debugMe("Auf Hysterese warten hysterese $hysterese stateBatterie $stateBatterie"); 
     } else {   // heizt schon überprüfen ob heizen stop wegen Batterie
-      if ($stateBatterie < 10) {
+      if ($stateBatterie < 15) {
           $hysterese= $hystereseSoll;     // ab jetzt warten bis Füllstand Batterie $hystereseSoll erreicht
           heizen(0) ; 
           $logger->Info("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  Batterie<10%");
