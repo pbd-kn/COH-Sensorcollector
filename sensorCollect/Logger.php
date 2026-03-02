@@ -77,9 +77,9 @@ class Logger
     public function Info(string $txt): void
     {
         if ($this->logfileHandle) {
-            fwrite($this->logfileHandle, $this->addDebugInfoToText("Info: ".$txt));
+            fwrite($this->logfileHandle, $this->addDebugInfoToText(date('d.m.Y H:i:s') . " Info: ".$txt));
         } else {
-            echo $this->addDebugInfoToText("Info: ".$txt);
+            echo $this->addDebugInfoToText(date('d.m.Y H:i:s') . " Info: ".$txt);
         }
         
     }
@@ -87,9 +87,9 @@ class Logger
     public function Error(string $txt): void
     {
         if ($this->logfileHandle) {
-            fwrite($this->logfileHandle, $this->addDebugInfoToText("Error: ".$txt));
+            fwrite($this->logfileHandle, $this->addDebugInfoToText(date('d.m.Y H:i:s') . " Error: ".$txt));
         } else {
-            echo $this->addDebugInfoToText("Error: ".$txt);
+            echo $this->addDebugInfoToText(date('d.m.Y H:i:s') . " Error: ".$txt);
         }
     }
     public function isDebug(): bool

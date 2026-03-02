@@ -501,6 +501,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
     if ($hysterese != 0 && ($stateBatterie < 10 || $stateBatterie < $hystereseSoll)) {  // Hysterese Modus warten bis hystereseSoll erreicht 
       heizen(0) ; 
       $logger->Info("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  warten auf hysterese"); 
+      $sleepTime=$repeat*60;  
       goto nextIteration;      
     }
   } 
@@ -579,7 +580,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   $currentDateTime = new DateTime();
   $currentDateTime->add(new DateInterval('PT' . $sleepTime . 'S'));
   $w=$currentDateTime->format('Y-m-d H:i:s');
-  $logger->Info(date('d.m.Y H:i:s')." iteration: $iteration sleep bis: $w sec Batterie $stateBatterie hysterese $hysterese\n");
+  $logger->Info(date('d.m.Y H:i:s')." it: $iteration sleep bis: $w Batt $stateBatterie hysterese $hysterese\n");
   if (isset($logfileHandle)) fclose($logfileHandle);
   $logfile="";
   unset($logfileHandle);
