@@ -15,6 +15,12 @@ if [ -f "$LOGFILE" ]; then
     ERRORS=$(grep -i -c "error" "$LOGFILE")
     if [ "$ERRORS" -gt 0 ]; then
         OUTPUT+="Errors in logfile: $ERRORS "
+
+        # Letzte 2 Error-Zeilen holen
+        LAST_ERRORS=$(grep -i "error" "$LOGFILE" | tail -n 2)
+
+        OUTPUT+=$'\n--- Last 2 Errors ---\n'
+        OUTPUT+="$LAST_ERRORS"
     fi
 fi
 
@@ -24,6 +30,5 @@ if [ -z "$OUTPUT" ]; then
 else
     printf "%s" "$OUTPUT"
 fi
-
 
 
