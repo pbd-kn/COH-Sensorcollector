@@ -236,6 +236,7 @@ while (true) {
     $arrResults = $manager->fetchAll($db);
 
     $now = time();
+    $anz = 0;
     foreach ($arrResults as $result) {
         // Normalisieren
         $sensorID        = trim((string)($result['sensorID']        ?? ''));
@@ -278,6 +279,7 @@ while (true) {
             // Fehler pro Sensor protokollieren, weiter mit dem nächsten
             $logger->Error("processing failed for sensorID='$sensorID': " . $e->getMessage());
         }
+        $anz++;
     }
 
     // Alte Daten (älter als 1 Jahr) aufräumen
@@ -293,6 +295,6 @@ while (true) {
 
     // Sleep
     $sleepSeconds = max(1, $pollTime) * 60;
-    $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " – Sleep (Minuten): $pollTime");
+    $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor $anz – Sleep (Minuten): $pollTime");
     sleep($sleepSeconds);
 }
