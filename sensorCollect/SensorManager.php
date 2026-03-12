@@ -6,17 +6,11 @@ use PbdKn\cohSensorcollector\Logger;
 
 class SensorManager
 {
-    private array $fetchers;
-    private ?Logger $logger = null;
 
-    public function __construct(array $fetchers)
-    {
-        $this->fetchers = $fetchers;
-        //$this->logger = new Logger(debug: true);
-        $this->logger = Logger::getInstance();
-    }
 
-    public function fetchAll($db): array
+    //public function __construct(array $fetchers)
+    public function __construct( private mysql_dialog $db, private Logger $logger, private array $fetchers) {}
+    public function fetchAll(): array
     {
         // lese alle sensoren incl. geraet
         $sql = "SELECT sensor.*, geraet.* ";
@@ -24,7 +18,7 @@ class SensorManager
         $sql .= "LEFT JOIN tl_coh_geraete AS geraet ";
         $sql .= "ON sensor.sensorSource = geraet.geraeteID";
         $sql .= " ORDER BY geraet.geraeteID";
-        $res=$db->query($sql);
+        $res=$this->db->query($sql);
         $sensors = [];
         while ($row = $res->fetch_assoc()) {
             $sensors[] = $row;

@@ -6,11 +6,10 @@ namespace PbdKn\cohSensorcollector;
 // Autoloader
 require_once __DIR__ . '/autoload.php';
 
-use PbdKn\cohSensorcollector\mysql_dialog;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\FetcherRegistry;
 use PbdKn\cohSensorcollector\Logger;
-//use mysqli;
+use mysqli;
 
 // ---------------------------------------------------------
 // Setup
@@ -19,11 +18,12 @@ date_default_timezone_set('Europe/Berlin');
 $logger = Logger::getInstance('/home/peter/coh/logs/sensor-collect.log');
 
 // DB-Verbindung
-$db = new mysql_dialog();
-if (!$db->connect('localhost', 'peter', 'sql666sql', 'co5_solar')) { 
-    $logger->Error("DB connect failed: " . $db->errors);
+$db = @new mysqli('localhost', 'peter', 'sql666sql', 'co5_solar');
+if ($db->connect_errno) {
+    $logger->Error("DB connect failed ({$db->connect_errno}): {$db->connect_error}");
     exit(1);
 }
+$db->set_charset('utf8mb4');
 
 // ---------------------------------------------------------
 // Registry & Fetcher laden
@@ -32,19 +32,16 @@ $registry = new FetcherRegistry();
 foreach (glob(__DIR__ . '/Sensor/*.php') as $file) {
     require_once $file;
 }
-
-$httpClient = new SimpleHttpClient();
 foreach (get_declared_classes() as $class) {
     if (is_subclass_of($class, SensorFetcherInterface::class)) {
-        $fetcher = new $class($db, $logger, $httpClient);
+        $fetcher = new $class();
         $registry->registerFetcher('sensor.fetcher', $fetcher);
     }
 }
-
 $fetchers = $registry->getFetchersByTag('sensor.fetcher');
 
 // SensorManager
-$manager = new SensorManager($db,$logger,$fetchers);
+$manager = new SensorManager($fetchers);
 
 // ---------------------------------------------------------
 // Hilfsfunktionen
@@ -52,7 +49,7 @@ $manager = new SensorManager($db,$logger,$fetchers);
 /**
  * Hole das history-Flag für eine sensorID.
  */
-function getHistoryFlag(mysql_dialog  $db, string $sensorID): int
+function getHistoryFlag(mysqli $db, string $sensorID): int
 {
     $sql = "SELECT history FROM tl_coh_sensors WHERE sensorID = ? LIMIT 1";
     $stmt = $db->prepare($sql);
@@ -71,7 +68,7 @@ function getHistoryFlag(mysql_dialog  $db, string $sensorID): int
  * Update der jüngsten Zeile für sensorID (history=0-Fall).
  * Legt eine Zeile an, wenn es noch keine gibt.
  */
-function upsertCurrentValue(mysql_dialog  $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void
+function upsertCurrentValue(mysqli $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void
 {
     // Transaktion starten (gegen Race Conditions)
     $db->begin_transaction();
@@ -131,7 +128,7 @@ function upsertCurrentValue(mysql_dialog  $db, string $sensorID, int $tstamp, st
  * Historie-Fall: wenn der letzte Wert gleich ist -> nur tstamp aktualisieren,
  * sonst neuen Datensatz anlegen.
  */
-function insertOrTouchHistory(mysql_dialog  $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void
+function insertOrTouchHistory(mysqli $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void
 {
     $db->begin_transaction();
 
@@ -199,63 +196,9 @@ function insertOrTouchHistory(mysql_dialog  $db, string $sensorID, int $tstamp, 
     }
 }
 
-/**
- * Speicher die aufgesammelten sensorwerte in die datenbank
- */
- 
-function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
-{    
-            //$logger->Info("saveSensors len " . count($arrResults));
-
-    $now = time();
-    $anz = 0;
-    foreach ($arrResults as $result) {
-        // Normalisieren
-        $sensorID        = trim((string)($result['sensorID']        ?? ''));
-        $sensorValue     = (string)($result['sensorValue']          ?? '');
-        $sensorEinheit   = (string)($result['sensorEinheit']        ?? '');
-        $sensorValueType = (string)($result['sensorValueType']      ?? '');
-        $sensorSource    = (string)($result['sensorSource']         ?? '');
-        $tstamp          = time();
-
-        if ($sensorID === '') {
-            $logger->Error('Leere sensorID in fetchAll()-Result – Eintrag wird übersprungen.');
-            continue;
-        }
-
-        // History-Flag holen (kein JOIN mit tl_coh_sensorvalue!)
-        try {
-            $history = getHistoryFlag($db, $sensorID);
-        } catch (\Throwable $e) {
-            $logger->Error("history lookup failed for sensorID='$sensorID': " . $e->getMessage());
-            continue;
-        }
-
-        // Logging für versteckte Unterschiede
-        $logger->debugMe(sprintf( 'SID raw="%s" len=%d hex=%s', $sensorID, strlen($sensorID), bin2hex($sensorID)));
-
-        try {
-            if ($history === 0) {
-                // genau eine aktuelle Zeile pflegen
-                upsertCurrentValue($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
-            } else {
-                // Historie sammeln (aber bei identischem letzten Wert nur tstamp updaten)
-                insertOrTouchHistory($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
-            }
-        } catch (\Throwable $e) {
-            // Fehler pro Sensor protokollieren, weiter mit dem nächsten
-            $logger->Error("processing failed for sensorID='$sensorID': " . $e->getMessage());
-        }
-        $anz++;
-    }
-            //$logger->Info("saveSensors geschrieben $anz " . count($arrResults));
-    return $anz;
-}
-
 // ---------------------------------------------------------
 // Main-Loop
 // ---------------------------------------------------------
-
 $iteration = 0;
 $logger->Info("Restart: " . date('d.m.Y H:i:s'));
 
@@ -290,20 +233,66 @@ while (true) {
     $logger->setDebug($debug);
 
     // --- Werte abholen ---
-    $arrResults = $manager->fetchAll();     // die db wird verwendet um alle senseren per querry zu lesen. sollte evtl in den Konstruktor von sensormanager rein 
-    $anz = saveSensors($db, $logger, $arrResults );
-    // Alte Daten (älter als 1 Jahr) aufräumen
-$cleanupSql = "DELETE FROM tl_coh_sensorvalue WHERE tstamp < UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))";
+    $arrResults = $manager->fetchAll($db);
 
-if ($db->query($cleanupSql)) {
-    $deleted = $db->affected();
+    $now = time();
+    $anz = 0;
+    foreach ($arrResults as $result) {
+        // Normalisieren
+        $sensorID        = trim((string)($result['sensorID']        ?? ''));
+        $sensorValue     = (string)($result['sensorValue']          ?? '');
+        $sensorEinheit   = (string)($result['sensorEinheit']        ?? '');
+        $sensorValueType = (string)($result['sensorValueType']      ?? '');
+        $sensorSource    = (string)($result['sensorSource']         ?? '');
+        $tstamp          = time();
 
-    if ($deleted > 0) {
-        $logger->Info("Cleanup: Es wurden in tl_coh_sensorvalue $deleted gelöscht die älter als 1 Jahr sind.");
+        if ($sensorID === '') {
+            $logger->Error('Leere sensorID in fetchAll()-Result – Eintrag wird übersprungen.');
+            continue;
+        }
+
+        // History-Flag holen (kein JOIN mit tl_coh_sensorvalue!)
+        try {
+            $history = getHistoryFlag($db, $sensorID);
+        } catch (\Throwable $e) {
+            $logger->Error("history lookup failed for sensorID='$sensorID': " . $e->getMessage());
+            continue;
+        }
+
+        // Logging für versteckte Unterschiede
+        $logger->debugMe(sprintf(
+            'SID raw="%s" len=%d hex=%s',
+            $sensorID,
+            strlen($sensorID),
+            bin2hex($sensorID)
+        ));
+
+        try {
+            if ($history === 0) {
+                // genau eine aktuelle Zeile pflegen
+                upsertCurrentValue($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
+            } else {
+                // Historie sammeln (aber bei identischem letzten Wert nur tstamp updaten)
+                insertOrTouchHistory($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
+            }
+        } catch (\Throwable $e) {
+            // Fehler pro Sensor protokollieren, weiter mit dem nächsten
+            $logger->Error("processing failed for sensorID='$sensorID': " . $e->getMessage());
+        }
+        $anz++;
     }
-} else {
-    $logger->Error("cleanup failed");
-}
+
+    // Alte Daten (älter als 1 Jahr) aufräumen
+    $cleanupSql = "DELETE FROM tl_coh_sensorvalue WHERE tstamp < UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))";
+    if ($db->query($cleanupSql)) {
+        $deleted = $db->affected_rows;
+        if ($deleted > 0) {
+            $logger->Info("Cleanup: Es wurden in tl_coh_sensorvalue $deleted gelöscht die älter als 1 Jahr sind.");
+        }
+    } else {
+        $logger->Error("cleanup failed: " . $db->error);
+    }
+
     // Sleep
     $sleepSeconds = max(1, $pollTime) * 60;
     $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor $anz – Sleep (Minuten): $pollTime");

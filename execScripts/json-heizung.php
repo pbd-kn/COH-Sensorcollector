@@ -264,7 +264,7 @@ function heizen($modus) {
   //setup.jsn?bstmode=0
   global $urlheizStab,$ctrl,$logger;
   $steuerungseinstellung=$ctrl;    
-    $url1 = $url2 = "";
+  $url1 = $url2 = "";
   if ($steuerungseinstellung==1) {           // http
     $logger->Info("Heizen Modus Heizstab $modus Protokoll $steuerungseinstellung bei http nichts tun");
     return false;
@@ -277,7 +277,8 @@ function heizen($modus) {
       $url2=$urlheizStab.'data.jsn?bststrt=0';
     }
   }
-  $logger->Info("Heizen Modus Heizstab $modus Protokoll $steuerungseinstellung url1: $url1 url2: $url2");
+  $logger->Info("Heizen Modus Heizstab $modus ");
+  $logger->debugMe("Heizen Modus Heizstab $steuerungseinstellung url1: $url1 url2: $url2");
   //$response=@file_get_contents($urlheizStab.'data.jsn?bststrt=1');
   if ($url1 && $url2) {
         $response1 = curlRequest($url1);

@@ -7,21 +7,15 @@ namespace PbdKn\cohSensorcollector\Sensor;
 use PbdKn\cohSensorcollector\SimpleHttpClient;
 use PbdKn\cohSensorcollector\Logger;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
+use PbdKn\cohSensorcollector\mysql_dialog;
 
 class HeizstabSensorService implements SensorFetcherInterface
 {
 
     private ?array $aktData  = null;
     private ?array $setupData  = null;
-    private ?Logger $logger = null;
-    private ?SimpleHttpClient $httpClient = null;
 
-    public function __construct()
-    {
-        $this->httpClient = new SimpleHttpClient();
-        //$this->logger = new Logger(debug: true);
-        $this->logger = Logger::getInstance();
-    }
+    public function __construct( private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient) {}        
     
     public function supports( $sensor): bool
     {

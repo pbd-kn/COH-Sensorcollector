@@ -7,20 +7,15 @@ namespace PbdKn\cohSensorcollector\Sensor;
 use PbdKn\cohSensorcollector\SimpleHttpClient;
 use PbdKn\cohSensorcollector\Logger;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
+use PbdKn\cohSensorcollector\mysql_dialog;
 
 class IQBoxSensorService implements SensorFetcherInterface
 {
-    private ?Logger $logger = null;
-    private ?SimpleHttpClient $httpClient = null;
     private string $cookieFile = '/home/peter/scripts/coh/cookies/iqbox_cookie.txt';
     private string $baseUrl    = 'http://192.168.178.26';
 
-    public function __construct()
-    {
-        $this->logger = Logger::getInstance();
-
-        // Login EINMAL beim Start
-    }
+    public function __construct( private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient) {}   
+     
 
     public function supports( $sensor): bool
     {

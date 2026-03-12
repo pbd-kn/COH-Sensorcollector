@@ -6,20 +6,15 @@ namespace PbdKn\cohSensorcollector\Sensor;
 use PbdKn\cohSensorcollector\SimpleHttpClient;
 use PbdKn\cohSensorcollector\Logger;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
+use PbdKn\cohSensorcollector\mysql_dialog;
 
 class TasmotaSensorService implements SensorFetcherInterface
 {
 
-    private ?Logger $logger = null;
-    private ?SimpleHttpClient $httpClient = null;
     private ?array $dataFromDevice  = null;
 
-    public function __construct()
-    {
-        $this->httpClient = new SimpleHttpClient();
-        $this->logger = Logger::getInstance();
-    }
-
+    public function __construct( private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient) {}   
+     
     public function supports( $sensor): bool
     {
         return strtolower($sensor['sensorSource']) === 'tasmota';
