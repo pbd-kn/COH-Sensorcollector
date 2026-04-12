@@ -310,6 +310,12 @@ private function getDailyValue(string $sensorID): float
         $conn = $this->db->getConnection();
 
         $startOfDay = strtotime('today midnight');
+        /*
+         * 7 tage zurück
+         * $dt = new DateTime('today midnight');
+         * $dt->modify('-7 days');
+         * $ts = $dt->getTimestamp();
+         */
 
         // erster Wert des Tages
         $sqlFirst = "

@@ -1,7 +1,7 @@
 <?php
 
 namespace PbdKn\cohSensorcollector;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+
 
 
 /* logger aufruf

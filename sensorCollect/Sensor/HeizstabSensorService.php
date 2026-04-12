@@ -27,6 +27,8 @@ class HeizstabSensorService implements SensorFetcherInterface
     }
     public function fetchArr(array $sensors): ?array // neue Methode
     { 
+        $debugval=false;
+        $this->logger->setDebug($debugval);
         $this->logger->debugMe( "HeizstabSensorService fetchArr len ".count($sensors));
         $res=array();
         try {
@@ -46,11 +48,13 @@ class HeizstabSensorService implements SensorFetcherInterface
                 ], ['id' => $sensor['id']);
 */
                 $this->logger->Error( $message);
+if ($debugval) $this->logger->setDebug(false);
                 return null;
             }
             $this->logger->debugMe("HeizstabSensorService url $url");
             if ( $this->getDataFromDevice($url) === null) {
                 $this->logger->Error( "getDataFromDevice null");
+if ($debugval) $this->logger->setDebug(false);
                 return null;
             }
             // Zugriff auf Werte, z.B.:
@@ -59,7 +63,9 @@ class HeizstabSensorService implements SensorFetcherInterface
                 if (!empty($sensor['sensorLokalId'])) $lokalAccess=$sensor['sensorLokalId'];
                 $value = $this->getHeizstabdata($lokalAccess);
                 $einheit=$sensor['sensorEinheit'];  
+                $this->logger->debugMe( "Heizstab Sensorservice SensorID  ".$sensor['sensorID']." lokalAccess $lokalAccess value $value Einheit $einheit");  
                 if (!empty($sensor['transFormProcedur'])) {
+                 $this->logger->debugMe( "Heizstab Sensorservice SensorID  ".$sensor['sensorID']." transFormProcedur ". $sensor['transFormProcedur']);  
                  if (method_exists($this, $sensor['transFormProcedur'])) {
                         $arr = $this->{$sensor['transFormProcedur']}($value);
                         $einheit=$arr['einheit'];                    
@@ -70,7 +76,14 @@ class HeizstabSensorService implements SensorFetcherInterface
                 }                   
                 $this->logger->debugMe( "Heizstab Sensorservice SensorID  ".$sensor['sensorID']." lokalAccess $lokalAccess value $value Einheit $einheit");  
                 if ($value === null) {
-//                    $this->logger->debugMe('Heizstab Sensorservice keinen wert für sensorID: '.$sensor['sensorID']);
+                    $this->logger->Info('Heizstab Sensorservice keinen wert für sensorID: '.$sensor['sensorID'] . "lokalAccess $lokalAccess");
+                    $res[$sensor['sensorID']] = [
+                        'sensorID'        => $sensor['sensorID'],
+                        'sensorValue'     => 0,
+                        'sensorEinheit'   => $einheit,
+                        'sensorValueType' => $sensor['sensorValueType'],
+                        'sensorSource'    => $sensor['sensorSource'],
+                    ];
                 } else {    
                     $res[$sensor['sensorID']] = [
                         'sensorID'        => $sensor['sensorID'],
@@ -90,6 +103,7 @@ class HeizstabSensorService implements SensorFetcherInterface
                 }
             }
 
+if ($debugval) $this->logger->setDebug(false);
             return $res;
         
         } catch (\Throwable $e) {
@@ -137,7 +151,8 @@ class HeizstabSensorService implements SensorFetcherInterface
     // liefert False bei einem Fehler
 
     private function getsetup($url) {
-        $url=$url."/data.jsn";
+        $url=$url."/setup.jsn";
+        $this->logger->debugMe( "getsetup from $url");
         $data = $this->httpClient->getJson($url);
         $this->setupData=$data;
         return $data;
@@ -147,11 +162,14 @@ class HeizstabSensorService implements SensorFetcherInterface
      */
     private function getHeizstabdata ($sensorID) {
         if (isset($this->aktData[$sensorID]) )  {  
+$this->logger->debugMe (" getHeizstabdata return $sensorID " . $this->aktData[$sensorID]);
           return $this->aktData[$sensorID];
         } else if (isset($this->setupData[$sensorID]) )  {  
+$this->logger->debugMe (" getHeizstabdata return $sensorID " . $this->setupData[$sensorID]);
           return $this->setupData[$sensorID];
         } else {
-          return null;
+            $this->logger->Error( "Heizstab: Fehler bei getHeizstabdata : $sensorID $sensorID weder in aktData (data.jsn) noch setupData (data.jsn)");          
+            return null;
         }
     } 
     /*

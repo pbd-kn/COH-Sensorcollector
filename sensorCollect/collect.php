@@ -10,6 +10,7 @@ use PbdKn\cohSensorcollector\mysql_dialog;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\FetcherRegistry;
 use PbdKn\cohSensorcollector\Logger;
+use PbdKn\cohSensorcollector\SensorPararameter;
 //use mysqli;
 
 // ---------------------------------------------------------
@@ -17,7 +18,7 @@ use PbdKn\cohSensorcollector\Logger;
 // ---------------------------------------------------------
 date_default_timezone_set('Europe/Berlin');
 $logger = Logger::getInstance('/home/peter/coh/logs/sensor-collect.log');
-
+$SensorParameter = SensorParameter::getInstance();
 // DB-Verbindung
 $db = new mysql_dialog();
 if (!$db->connect('localhost', 'peter', 'sql666sql', 'co5_solar')) { 
@@ -71,127 +72,252 @@ function getHistoryFlag(mysql_dialog  $db, string $sensorID): int
  * Update der jüngsten Zeile für sensorID (history=0-Fall).
  * Legt eine Zeile an, wenn es noch keine gibt.
  */
-function upsertCurrentValue(mysql_dialog  $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void
-{
-    // Transaktion starten (gegen Race Conditions)
+function upsertCurrentValue(
+    mysql_dialog $db,
+    string $sensorID,
+    int $tstamp,
+    string $sensorValue,
+    string $einheit,
+    string $type,
+    string $source,
+    Logger $logger
+): void {
     $db->begin_transaction();
 
     try {
-        // Jüngste Zeile für diese sensorID sperren
-        $sqlFind = "SELECT id FROM tl_coh_sensorvalue WHERE sensorID = ? ORDER BY id DESC LIMIT 1 FOR UPDATE";
+        // ---------------------------------------------------
+        // WERTE NORMALISIEREN
+        // ---------------------------------------------------
+        $sensorValue = trim($sensorValue);
+        $einheit     = trim($einheit);
+        $type        = trim($type);
+        $source      = trim($source);
+
+        if ($sensorValue === '') {
+            $logger->debugMe("Skip current upsert: empty value for sensorID=$sensorID");
+            $db->commit();
+            return;
+        }
+
+        // ---------------------------------------------------
+        // LETZTEN EINTRAG HOLEN (LOCK)
+        // ---------------------------------------------------
+        $sqlFind = "SELECT id
+                      FROM tl_coh_sensorvalue
+                     WHERE sensorID = ?
+                     ORDER BY id DESC
+                     LIMIT 1
+                     FOR UPDATE";
+
         $stmt = $db->prepare($sqlFind);
         if (!$stmt) {
             throw new \RuntimeException("prepare(select current) failed: " . $db->error);
         }
+
         $stmt->bind_param('s', $sensorID);
         $stmt->execute();
         $stmt->bind_result($id);
         $hasRow = $stmt->fetch();
         $stmt->close();
 
+        // ---------------------------------------------------
+        // UPDATE (IMMER ALLES SETZEN!)
+        // ---------------------------------------------------
         if ($hasRow) {
+
             $upd = "UPDATE tl_coh_sensorvalue
-                       SET tstamp = ?, sensorValue = ?, sensorEinheit = ?, sensorValueType = ?, sensorSource = ?
+                       SET tstamp = ?,
+                           sensorValue = ?,
+                           sensorEinheit = ?,
+                           sensorValueType = ?,
+                           sensorSource = ?
                      WHERE id = ?";
+
             $stmtU = $db->prepare($upd);
             if (!$stmtU) {
                 throw new \RuntimeException("prepare(update current) failed: " . $db->error);
             }
-            $stmtU->bind_param('issssi', $tstamp, $sensorValue, $einheit, $type, $source, $id);
+
+            $stmtU->bind_param(
+                'issssi',
+                $tstamp,
+                $sensorValue,
+                $einheit,
+                $type,
+                $source,
+                $id
+            );
+
             if (!$stmtU->execute()) {
                 throw new \RuntimeException("exec(update current) failed: " . $stmtU->error);
             }
+
             $stmtU->close();
-            $logger->debugMe("Update current (history=0): id=$id, sensorID=$sensorID, tstamp=$tstamp");
+
+            $logger->debugMe(
+                "Update current: id=$id, sensorID=$sensorID, value=" .
+                var_export($sensorValue, true) .
+                ", einheit=$einheit"
+            );
+
         } else {
+
+            // ---------------------------------------------------
+            // INSERT
+            // ---------------------------------------------------
             $ins = "INSERT INTO tl_coh_sensorvalue
                        (tstamp, sensorID, sensorValue, sensorEinheit, sensorValueType, sensorSource)
                     VALUES (?, ?, ?, ?, ?, ?)";
+
             $stmtI = $db->prepare($ins);
             if (!$stmtI) {
                 throw new \RuntimeException("prepare(insert current) failed: " . $db->error);
             }
-            $stmtI->bind_param('isssss', $tstamp, $sensorID, $sensorValue, $einheit, $type, $source);
+
+            $stmtI->bind_param(
+                'isssss',
+                $tstamp,
+                $sensorID,
+                $sensorValue,
+                $einheit,
+                $type,
+                $source
+            );
+
             if (!$stmtI->execute()) {
                 throw new \RuntimeException("exec(insert current) failed: " . $stmtI->error);
             }
+
             $stmtI->close();
-            $logger->debugMe("Insert current (history=0): sensorID=$sensorID, tstamp=$tstamp");
+
+            $logger->debugMe(
+                "Insert current: sensorID=$sensorID, tstamp=$tstamp, value=" .
+                var_export($sensorValue, true)
+            );
         }
 
         $db->commit();
+
     } catch (\Throwable $e) {
         $db->rollback();
         $logger->Error($e->getMessage());
         throw $e;
     }
 }
-
 /**
  * Historie-Fall: wenn der letzte Wert gleich ist -> nur tstamp aktualisieren,
  * sonst neuen Datensatz anlegen.
  */
-function insertOrTouchHistory(mysql_dialog  $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void
-{
+function insertOrTouchHistory(
+    mysql_dialog $db,
+    string $sensorID,
+    int $tstamp,
+    string $sensorValue,
+    string $einheit,
+    string $type,
+    string $source,
+    Logger $logger
+): void {
     $db->begin_transaction();
 
     try {
-        // Letzten Eintrag für diese sensorID holen & sperren
-        $sqlLast = "SELECT id, TRIM(sensorValue) AS v
+        // Letzten Eintrag holen & sperren
+        $sqlLast = "SELECT id,
+                           TRIM(sensorValue)       AS v,
+                           TRIM(sensorEinheit)    AS e,
+                           TRIM(sensorValueType)  AS t,
+                           TRIM(sensorSource)     AS s
                       FROM tl_coh_sensorvalue
                      WHERE sensorID = ?
                      ORDER BY id DESC
                      LIMIT 1
                      FOR UPDATE";
+
         $stmt = $db->prepare($sqlLast);
         if (!$stmt) {
-            throw new \RuntimeException("prepare(select last hist) failed: " . $db->error);
+            $logger->Error("Skip history insert: empty value for sensorID=$sensorID");
+            $db->commit();
+            return;
         }
+
         $stmt->bind_param('s', $sensorID);
         $stmt->execute();
-        $stmt->bind_result($lastId, $lastValTrim);
+        $stmt->bind_result($lastId, $lastVal, $lastEinheit, $lastType, $lastSource);
         $hasLast = $stmt->fetch();
         $stmt->close();
 
-        $curValTrim = trim($sensorValue);
-        if ($curValTrim === '') {
+        $curVal      = trim($sensorValue);
+        $curEinheit  = trim($einheit);
+        $curType     = trim($type);
+        $curSource   = trim($source);
+
+        if ($curVal === '') {
             $logger->debugMe("Skip history insert: empty value for sensorID=$sensorID");
             $db->commit();
             return;
-        }        
+        }
 
-        if ($hasLast && $lastValTrim === $curValTrim) {
-            // gleicher Wert -> nur tstamp anheben
+        // Vergleich: jetzt ALLES berücksichtigen
+        $isSame =
+            $hasLast &&
+            $lastVal      === $curVal &&
+            $lastEinheit  === $curEinheit &&
+            $lastType     === $curType &&
+            $lastSource   === $curSource;
+
+        if ($isSame) {
+            // nur Touch
             $upd = "UPDATE tl_coh_sensorvalue SET tstamp = ? WHERE id = ?";
             $stmtU = $db->prepare($upd);
             if (!$stmtU) {
-                throw new \RuntimeException("prepare(update touch) failed: " . $db->error);
+                $logger->Error("prepare(update touch) failed: " . $db->error);
+                $db->commit();
+                return;
             }
+
             $stmtU->bind_param('ii', $tstamp, $lastId);
+
             if (!$stmtU->execute()) {
-                throw new \RuntimeException("exec(update touch) failed: " . $stmtU->error);
+                $logger->Error("exec(update touch) failed: " . $stmtU->error);
+                $db->commit();
+                return;
             }
+
             $stmtU->close();
+
             $logger->debugMe("Touch history: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
         } else {
-            // neuer Wert -> INSERT
-
+            // INSERT (auch wenn nur Einheit geändert wurde!)
             $ins = "INSERT INTO tl_coh_sensorvalue
                        (tstamp, sensorID, sensorValue, sensorEinheit, sensorValueType, sensorSource)
                     VALUES (?, ?, ?, ?, ?, ?)";
+
             $stmtI = $db->prepare($ins);
             if (!$stmtI) {
-                throw new \RuntimeException("prepare(insert hist) failed: " . $db->error);
+                $logger->Error("prepare(insert hist) failed: " . $db->error);
+                $db->commit();
+                return;
             }
+
             $stmtI->bind_param('isssss', $tstamp, $sensorID, $sensorValue, $einheit, $type, $source);
+
             if (!$stmtI->execute()) {
-                throw new \RuntimeException("exec(insert hist) failed: " . $stmtI->error);
+                $logger->Error("exec(insert hist) failed: " . $stmtI->error);
+                $db->commit();
+                $stmtI->close();
+                return;
             }
+
             $stmtI->close();
-            $logger->debugMe("Insert history: sensorID=$sensorID, tstamp=$tstamp, value=[" . var_export($sensorValue, true) . "]");
+
+            $logger->debugMe(
+                "Insert history: sensorID=$sensorID, tstamp=$tstamp, value=[" .
+                var_export($sensorValue, true) . "], einheit=$einheit"
+            );
         }
 
         $db->commit();
+
     } catch (\Throwable $e) {
         $db->rollback();
         $logger->Error($e->getMessage());
@@ -205,7 +331,7 @@ function insertOrTouchHistory(mysql_dialog  $db, string $sensorID, int $tstamp, 
  
 function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
 {    
-            //$logger->Info("saveSensors len " . count($arrResults));
+    //$logger->Info("saveSensors len " . count($arrResults));
 
     $now = time();
     $anz = 0;
@@ -217,12 +343,10 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
         $sensorValueType = (string)($result['sensorValueType']      ?? '');
         $sensorSource    = (string)($result['sensorSource']         ?? '');
         $tstamp          = time();
-
         if ($sensorID === '') {
-            $logger->Error('Leere sensorID in fetchAll()-Result – Eintrag wird übersprungen.');
+            $logger->Error("Leere sensorID in fetchAll()-Result – Eintrag wird übersprungen ($anz). sensorValue $sensorValue sensorSource $sensorSource");
             continue;
         }
-
         // History-Flag holen (kein JOIN mit tl_coh_sensorvalue!)
         try {
             $history = getHistoryFlag($db, $sensorID);
@@ -248,7 +372,7 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
         }
         $anz++;
     }
-            //$logger->Info("saveSensors geschrieben $anz " . count($arrResults));
+    //$logger->Info("saveSensors geschrieben $anz " . count($arrResults));
     return $anz;
 }
 
@@ -288,6 +412,7 @@ while (true) {
         }
     }
     $logger->setDebug($debug);
+    $SensorParameter->setpollTime($pollTime);
 
     // --- Werte abholen ---
     $arrResults = $manager->fetchAll();     // die db wird verwendet um alle senseren per querry zu lesen. sollte evtl in den Konstruktor von sensormanager rein 
@@ -305,7 +430,8 @@ if ($db->query($cleanupSql)) {
     $logger->Error("cleanup failed");
 }
     // Sleep
-    $sleepSeconds = max(1, $pollTime) * 60;
-    $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor $anz – Sleep (Minuten): $pollTime");
+    $newPoll=$SensorParameter->getpollTime();
+    $sleepSeconds = max(1, $newPoll) * 60;
+    $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor ($anz) Sleep (Minuten): $pollTime");
     sleep($sleepSeconds);
 }
