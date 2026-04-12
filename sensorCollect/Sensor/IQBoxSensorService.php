@@ -80,7 +80,7 @@ class IQBoxSensorService implements SensorFetcherInterface
             $this->logger->Info("Login failed: " . curl_error($ch));
             throw new \RuntimeException("Login HTTP error $code");
         }
-        $this->logger->Info("ampereLogin Login OK");
+        $this->logger->debugMe("ampereLogin Login OK");
     }
     // -------------------------------------------------
     // REQUEST (mit Schutz gegen 503)
@@ -154,19 +154,6 @@ class IQBoxSensorService implements SensorFetcherInterface
             }
             foreach ($sensors as $sensor) {
                 $name = !empty($sensor['sensorLokalId']) ? $sensor['sensorLokalId'] : $sensor['sensorID'];
-//                $result = $this->ampereRequest($name);
-//                if (!$result['ok']) continue;
-//                $data = json_decode($result['data'], true);
-//                $value = $data['state'] ?? null;
-//                $origvalue=$value;
-//                if ($value === null) continue;
-//                if (!empty($sensor['transFormProcedur']) && method_exists($this, $sensor['transFormProcedur'])) {
-//                    $arr = $this->{$sensor['transFormProcedur']}($value);
-//                    $value = $arr['wert'];
-//                    $einheit = $arr['einheit'];
-//                } else {
-//                    $einheit = $sensor['sensorEinheit'];
-//                }
                 //$this->logger->debugMe("name: $name value $value einheit $einheit ");
                 $rrArr = [];
                 if (isset($this->items[$name])) {
@@ -200,52 +187,31 @@ class IQBoxSensorService implements SensorFetcherInterface
     // -------------------------------------------------
     // TEST: ALLE ITEMS IN EINEM REQUEST HOLEN
     // -------------------------------------------------
-private function getDataFromDevice() : ?array
-{
-    try {
-        $result = $this->ampereRequest(); // 🔥 kein eigener curl mehr
-
-        if (!$result['ok']) {
-            $this->logger->Error("getDataFromDevice Fehler");
-            return null;
+    private function getDataFromDevice() : ?array {
+        try {
+            $result = $this->ampereRequest(); // 🔥 kein eigener curl mehr
+            if (!$result['ok']) { $this->logger->Error("getDataFromDevice Fehler"); return null;
         }
-
         $data = json_decode($result['data'], true);
-
-        if (!is_array($data)) {
-            $this->logger->Error("getDataFromDevice JSON Fehler");
-            return null;
-        }
-
+        if (!is_array($data)) { $this->logger->Error("getDataFromDevice JSON Fehler"); return null; }
         // falls {items:[...]}
-        if (isset($data['items'])) {
-            $data = $data['items'];
-        }
-
+        if (isset($data['items'])) { $data = $data['items']; }
         $items = [];
-
         foreach ($data as $item) {
             if (!is_array($item)) continue;
-
             $name  = $item['name']  ?? null;
             $state = $item['state'] ?? null;
-
             if (!$name) continue;
-
-            $items[$name] = ($state === null || $state === 'NULL' || $state === 'UNDEF')
-                ? null
-                : $state;
+            $items[$name] = ($state === null || $state === 'NULL' || $state === 'UNDEF') ? null : $state;
         }
-
         $this->logger->debugMe("getDataFromDevice OK: " . count($items));
-
         return $items;
-
-    } catch (\Throwable $e) {
-        $this->logger->Error("getDataFromDevice Exception: " . $e->getMessage());
-        return null;
-    }
-}    // -------------------------------------------------
+        } catch (\Throwable $e) {
+            $this->logger->Error("getDataFromDevice Exception: " . $e->getMessage());
+            return null;
+        }
+    }    
+    // -------------------------------------------------
     // TRANSFORMS
     // -------------------------------------------------
     private function normalizeUnit(string $unit): string
@@ -256,7 +222,7 @@ private function getDataFromDevice() : ?array
         return strtolower($unit);
     }
     private function detectUnit(string $unitRaw): string {
-    $u = $this->normalizeUnit($unitRaw);
+        $u = $this->normalizeUnit($unitRaw);
         // zuerst längere / spezifische Einheiten!
         if (strpos($u, 'kwh') !== false) return 'kWh';
         if (strpos($u, 'wh') !== false) return 'Wh';
@@ -302,7 +268,9 @@ private function getDataFromDevice() : ?array
         // -----------------------------------
         switch ($unit) {
             case 'kWh':
-                if (is_numeric($value)) { $value = round($value, 2); }
+                if (is_numeric($value)) { 
+                    if (abs($value) >= 0.01) { $value = round($value, 2);}
+                }
                 $unitOut = 'kWh';
                 break;
             case 'Wh':
@@ -344,52 +312,4 @@ private function getDataFromDevice() : ?array
         }
         return ['wert' => $value, 'einheit' => $unitOut];
     }
-/*
-    private function IQSOC($stat)
-    {
-        $statearr = explode(" ", $stat);
-        return ['wert' => $statearr[0], 'einheit' => '%'];
-    }
-
-    private function IQkW($stat)
-    {
-        $valarr = explode("|", $stat ?? '');
-        $strWert = count($valarr) > 1 ? $valarr[1] : $stat;
-
-        $statearr = explode(" ", $strWert ?? '');
-        $v = strtolower($statearr[1] ?? '');
-
-        $value = ($v === 'w') ? round($statearr[0] / 1000, 2) : $statearr[0];
-
-        return ['wert' => $value, 'einheit' => 'kW'];
-    }
-
-    private function IQkWh($stat)
-    {
-        $valarr = explode("|", $stat ?? '');
-        $strWert = count($valarr) > 1 ? $valarr[1] : $stat;
-
-        $statearr = explode(" ", $strWert ?? '');
-        $rawValue = $statearr[0] ?? '';
-        $unit = strtolower($statearr[1] ?? '');
-
-        if (!is_numeric($rawValue)) {
-            return ['wert' => 0, 'einheit' => 'kWh'];
-        }
-
-        $value = match ($unit) {
-            'ws' => round($rawValue / 3600000, 2),
-            'wh' => round($rawValue / 1000, 2),
-            default => (float)$rawValue
-        };
-
-        return ['wert' => $value, 'einheit' => 'kWh'];
-    }
-
-    private function IQTemp($stat)
-    {
-        $statearr = explode(" ", $stat);
-        return ['wert' => $statearr[0], 'einheit' => '°C'];
-    }
-*/
 }
