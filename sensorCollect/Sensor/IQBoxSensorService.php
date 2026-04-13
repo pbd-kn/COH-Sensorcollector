@@ -153,19 +153,22 @@ class IQBoxSensorService implements SensorFetcherInterface
                 $this->logger->Error("IQBox Fehler: fehler beim lesen gettall" . $e->getMessage());
             }
             foreach ($sensors as $sensor) {
-                $name = !empty($sensor['sensorLokalId']) ? $sensor['sensorLokalId'] : $sensor['sensorID'];
-                //$this->logger->debugMe("name: $name value $value einheit $einheit ");
+                $sensorLokalId = !empty($sensor['sensorLokalId']) ? $sensor['sensorLokalId'] : $sensor['sensorID'];
+                $outputMode=$sensor['outputMode'];
+                $sensorID=$sensor['sensorID'];
+
+                //$this->logger->debugMe("name: $sensorLokalId value $value einheit $einheit ");
                 $rrArr = [];
-                if (isset($this->items[$name])) {
-                    $rrArr = $this->IQStatreal($this->items[$name],$name);
+                if (isset($this->items[$sensorLokalId])) {
+                    $rrArr = $this->IQStatreal($this->items[$sensorLokalId],$sensorLokalId, $sensorID, $outputMode);
                     $value = $rrArr['wert'];
                     $einheit = $rrArr['einheit'];
                 } 
                 else {
-                    $this->logger->Error("fetchArr this->items[$name] existiert nicht in items");
+                    $this->logger->Error("fetchArr this->items[$sensorLokalId] existiert nicht in items");
                     continue;
                 }
-                $this->logger->debugMe("Result 1: value $value einheit $einheit " . "sensorID " . $sensor['sensorID'] . " name $name ");
+                $this->logger->debugMe("Result 1: value $value einheit $einheit " . "sensorID " . $sensor['sensorID'] . " name $sensorLokalId ");
                 $res[$sensor['sensorID']] = [
                     'sensorID'        => $sensor['sensorID'],
                     'sensorValue'     => $value,
@@ -233,9 +236,36 @@ class IQBoxSensorService implements SensorFetcherInterface
         if ($u === 'c') return '°C';
         if (strpos($u, '%') !== false) return '%';
         return $unitRaw;
+    } 
+    /*
+     * liefert den ersten werte ab den startdatum
+     */
+    private function getValueFromStartday ($sensorID,$startOfDay) {
+
+        //$sensorID=$sensor['sensorID'];
+        
+        $conn = $this->db->getConnection();
+        // erster Wert ab $startOfDay
+        $sqlFirst = "
+            SELECT sensorValue
+            FROM tl_coh_sensorvalue
+            WHERE sensorID = '".$conn->real_escape_string($sensorID)."'
+            AND tstamp >= $startOfDay
+            ORDER BY tstamp ASC
+            LIMIT 1
+        ";
+$this->logger->debugMe("IQbox getValueFromStartday sql $sqlFirst");    
+        $resFirst = $conn->query($sqlFirst);
+        if (!$resFirst || !$rowFirst = $resFirst->fetch_assoc()) {
+            return 0;
+        }
+        $firstValue = (float)$rowFirst['sensorValue'];   
+        
+        return $firstValue;
     }    
-    private function IQStatreal($stat, $name) {
-        //$this->logger->debugMe("IQStatreal name $name stat $stat");
+           
+    private function IQStatreal($stat, $sensorLokalId, $sensorID,$outputMode) {
+        //$this->logger->debugMe("IQStatreal name $sensorLokalId stat $stat");
         // -----------------------------------
         // 1. Wert extrahieren
         // -----------------------------------
@@ -268,48 +298,61 @@ class IQBoxSensorService implements SensorFetcherInterface
         // -----------------------------------
         switch ($unit) {
             case 'kWh':
-                if (is_numeric($value)) { 
-                    if (abs($value) >= 0.01) { $value = round($value, 2);}
-                }
+                if (is_numeric($value)) {  if (abs($value) >= 0.01) { $value = round($value, 2);} }
                 $unitOut = 'kWh';
                 break;
             case 'Wh':
-                if (is_numeric($value)) { 
-                    $value = $value / 1000;
-                    if (abs($value) >= 0.01) { $value = round($value, 2);}
-                }
+                if (is_numeric($value)) { $value = $value / 1000; if (abs($value) >= 0.01) { $value = round($value, 2);} }
                 $unitOut = 'kWh';
                 break;
             case 'Ws':
-                if (is_numeric($value)) { 
-                    $value = $value / 3600000;
-                    if (abs($value) >= 0.01) { $value = round($value, 2); }
-                }
+                if (is_numeric($value)) { $value = $value / 3600000; if (abs($value) >= 0.01) { $value = round($value, 2); } }
                 $unitOut = 'kWh';
                 break;
             case 'kW':
-                if (is_numeric($value)) {
-                    if (abs($value) >= 0.01) { $value = round($value, 2); }
-                }
+                if (is_numeric($value)) { if (abs($value) >= 0.01) { $value = round($value, 2); } }
                 $unitOut = 'kW';
                 break;
             case 'W':
-                if (is_numeric($value)) {
-                    $value = $value / 1000;
-                    if (abs($value) >= 0.01) { $value = round($value, 2); }
-                }
+                if (is_numeric($value)) { $value = $value / 1000; if (abs($value) >= 0.01) { $value = round($value, 2); }}
                 $unitOut = 'kW';
                 break;
             case '°C':
-                if (is_numeric($value)) {
-                    if (abs($value) >= 0.01) { $value = round($value, 1); }
-                }
+                if (is_numeric($value)) { if (abs($value) >= 0.01) { $value = round($value, 1); } }
                 $unitOut = '°C';
             break;
             default:
                 $unitOut = $unit;
                 break;
         }
+        // 6. Value korrektur wenn outputMode nicht absulut ist
+        $this->logger->debugMe("IQbox getfromIQbox state ok variable $sensorLokalId value $value outputMode $outputMode ");    
+        $dt = new \DateTime('today midnight');            
+        switch ($outputMode) {
+            case 'daily':   $startOfDay = $dt->getTimestamp();
+                $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
+                if (abs($value) >= 0.01) { $value = round($value, 2); }
+                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                break;
+            case 'woche':   $dt->modify('-7 days'); $startOfDay = $dt->getTimestamp();
+                $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
+                if (abs($value) >= 0.01) { $value = round($value, 2); }
+                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                break;
+            case 'monat':   $dt->modify('-30 days'); $startOfDay = $dt->getTimestamp();
+                $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
+                if (abs($value) >= 0.01) { $value = round($value, 2); }
+                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                break;
+            case 'jahr':    $dt->modify('-365 days'); $startOfDay = $dt->getTimestamp();
+                $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
+                if (abs($value) >= 0.01) { $value = round($value, 2); }
+                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                break;
+            case 'absolute':
+            default: 
+                break;
+        }        
         return ['wert' => $value, 'einheit' => $unitOut];
     }
 }
