@@ -332,22 +332,22 @@ $this->logger->debugMe("IQbox getValueFromStartday sql $sqlFirst");
             case 'daily':   $startOfDay = $dt->getTimestamp();
                 $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
                 if (abs($value) >= 0.01) { $value = round($value, 2); }
-                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                //$unitOut = date('d.m.Y H:i:s', $startOfDay);
                 break;
             case 'woche':   $dt->modify('-7 days'); $startOfDay = $dt->getTimestamp();
                 $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
                 if (abs($value) >= 0.01) { $value = round($value, 2); }
-                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                //$unitOut = date('d.m.Y H:i:s', $startOfDay);
                 break;
             case 'monat':   $dt->modify('-30 days'); $startOfDay = $dt->getTimestamp();
                 $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
                 if (abs($value) >= 0.01) { $value = round($value, 2); }
-                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                //$unitOut = date('d.m.Y H:i:s', $startOfDay);
                 break;
             case 'jahr':    $dt->modify('-365 days'); $startOfDay = $dt->getTimestamp();
                 $value= $value - $this->getValueFromStartday ($sensorID,$startOfDay);
                 if (abs($value) >= 0.01) { $value = round($value, 2); }
-                $unitOut = date('d.m.Y H:i:s', $startOfDay);
+                //$unitOut = date('d.m.Y H:i:s', $startOfDay);
                 break;
             case 'absolute':
             default: 

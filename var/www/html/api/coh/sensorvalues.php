@@ -69,7 +69,7 @@ $db->set_charset('utf8mb4');
 // QUERY (OPTIMIERT!)
 // ------------------------------------
 // WICHTIG: nur benötigte Felder laden!
-$sql = "SELECT tstamp, sensorID, sensorValue
+$sql = "SELECT tstamp, sensorID, sensorValue , sensorEinheit
         FROM tl_coh_sensorvalue
         WHERE tstamp > ?
         ORDER BY tstamp ASC
