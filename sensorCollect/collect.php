@@ -418,17 +418,15 @@ while (true) {
     $arrResults = $manager->fetchAll();     // die db wird verwendet um alle senseren per querry zu lesen. sollte evtl in den Konstruktor von sensormanager rein 
     $anz = saveSensors($db, $logger, $arrResults );
     // Alte Daten (älter als 1 Jahr) aufräumen
-$cleanupSql = "DELETE FROM tl_coh_sensorvalue WHERE tstamp < UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))";
-
-if ($db->query($cleanupSql)) {
-    $deleted = $db->affected();
-
-    if ($deleted > 0) {
-        $logger->Info("Cleanup: Es wurden in tl_coh_sensorvalue $deleted gelöscht die älter als 1 Jahr sind.");
+    $cleanupSql = "DELETE FROM tl_coh_sensorvalue WHERE tstamp < UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR)) ORDER BY tstamp ASC LIMIT 1000 ";
+    if ($db->query($cleanupSql)) {
+        $deleted = $db->affected();
+        if ($deleted > 0) {
+            $logger->Info("Cleanup: Es wurden in tl_coh_sensorvalue $deleted gelöscht die älter als 1 Jahr sind.");
+        }
+    } else {
+        $logger->Error("cleanup failed beim löschen alter Sätze");
     }
-} else {
-    $logger->Error("cleanup failed");
-}
     // Sleep
     $newPoll=$SensorParameter->getpollTime();
     $sleepSeconds = max(1, $newPoll) * 60;
