@@ -58,25 +58,25 @@ if (isset($_POST['setType'])) {
         // -----------------------------------
         // Profilbezogene Leckagewerte
         // -----------------------------------
-        if (in_array($type, ['pv','pt','pf'], true)) {
+        if (in_array($type, ['pv','pt','pf'], true)) {                  // Volumen time durchfluß grenzuen einstellen
             $value = (int)$valueRaw;
             @file_get_contents($baseSet . $type . $profile . "/" . $value);
         }
         if ($type === 'pm') {
-            $value = ((int)$valueRaw === 1) ? 'true' : 'false';
+            $value = ((int)$valueRaw === 1) ? 'true' : 'false';                   // test aktivierern
             @file_get_contents($baseSet . "pm" . $profile . "/" . $value);
         }
         // -----------------------------------
         // Mikroleckage Test
         // -----------------------------------
-        if ($type === 'drp') {
+        if ($type === 'drp') {                             // test ntervall
             $value = (int)$valueRaw;
             if ($value >= 1 && $value <= 3) {
                 @file_get_contents($baseSet . "drp/" . $value);
                 usleep(300000);
             }
         }
-        if ($type === 'dtt') {
+        if ($type === 'dtt') {                              // Uhrzeit
             $value = trim((string)$valueRaw);
             if (preg_match('/^\d{2}:\d{2}$/', $value)) {
                 @file_get_contents($baseSet . "dtt/" . $value);
@@ -84,9 +84,27 @@ if (isset($_POST['setType'])) {
             }
         }
         if ($type === 'dex') {
-            @file_get_contents($baseSet . "dex/true");
-            usleep(300000);
+            $statusMsg = 'Mikroleckage Test cmd dex ';
+            $value = (int)$valueRaw;
+            if ($value === 1) {
+                $ctx = stream_context_create([
+                    'http' => [ 'timeout' => 5 ]
+                ]);
+                $res = @file_get_contents($baseSet . "dex", false, $ctx);                
+                if ($res !== false) {
+                    $err = error_get_last();
+                    $statusMsg .= $err['message'] ?? 'Fehler';
+                } else {
+                    $statusMsg .= 'ok';
+                }
+            } else {
+                $statusMsg .= "Kein Start value $value";
+            }
+            
+            header("Location: ".$_SERVER['PHP_SELF']."?Postmsg=".$statusMsg);
+            exit;        
         }
+
     }
     header("Location: " . $_SERVER['PHP_SELF']);
     exit;
@@ -494,6 +512,12 @@ pre {
 
 <h1>💧 SYR SafeTech Dashboard</h1>
 <span>url: <?= htmlspecialchars($url) ?></span>
+<?php
+$msg = trim($_GET['Postmsg'] ?? '');
+if ($msg !== '') {
+    echo '<div class="notice">' . htmlspecialchars($msg) . '</div>';
+}
+?>
 <br>
 &nbsp;
 
@@ -765,6 +789,7 @@ function openEdit(type, val){
 function closeEdit(){
     document.getElementById("editBox").style.display = "none";
 }
+
 function handleAction(el, text)
 {
     if (!confirm(text)) return false;

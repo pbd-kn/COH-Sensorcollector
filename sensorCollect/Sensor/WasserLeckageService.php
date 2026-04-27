@@ -17,12 +17,18 @@ class WasserLeckageService implements SensorFetcherInterface
      
     public function supports( $sensor): bool
     {
-        if (strtolower($sensor['sensorSource']) === 'wasserleckage') $this->logger->debugMe( "WasserLeckageService supports " . $sensor['sensorSource']);
-        return (strtolower($sensor['sensorSource']) === 'wasserleckage');
+        if (strtolower($sensor['sensorSource']) === 'wasserleckage') {
+            $this->logger->debugMe( "WasserLeckageService supports " . $sensor['sensorSource']);
+            $now = new \DateTime();                 // aktuelle Serverzeit
+            $time = $now->format('H:i');          // z.B. 02:15
+            if ($time >= '00:00' && $time <= '04:30') { return false;   // on de zeit zwischen die sensoren nicht abholen. wegen evtl laufendem Mikroleckagetest 
+            } else { return true; }
+        } else { return false; }
     }
-    public function fetch($sensor): array
+    public function fetch($sensor): ?array
     {
-        return ['WasserLeckage' => 'Fetched WasserLeckage data'];
+        $res=[];
+        return res;
     }
     public function fetchArr(array $sensors): ?array // neue Methode
     { 
@@ -50,25 +56,25 @@ if ($debugval) $this->logger->setDebug(false);
                 return null;
             }
             $this->dataFromDevice=$this->getDataFromDevice($url,"all");
-            if ( $this->dataFromDevice === null) {
+            if ( $this->dataFromDevice === null || count($this->dataFromDevice) == 0 ) {
                 $this->logger->Info( "WasserLeckage: Fehler bei Lesen aller daten vom WasserLeckage");  
                 return null;
             }
             // diese werte kommen bei als falsch zurück
             $arr=$this->getDataFromDevice($url,"alm");
-            if ( $arr === null) {
+            if ( $arr === null  || count($this->dataFromDevice) == 0) {
                 $this->logger->Info( "WasserLeckage: Fehler bei Lesen von alm WasserLeckage");  
                 return null;
             }
             $this->dataFromDevice = array_merge($this->dataFromDevice, $arr);
             $arr=$this->getDataFromDevice($url,"alw");
-            if ( $arr === null) {
+            if ( $arr === null || count($this->dataFromDevice) == 0 ) {
                 $this->logger->Info( "WasserLeckage: Fehler bei Lesen von alw WasserLeckage");  
                 return null;
             }
             $this->dataFromDevice = array_merge($this->dataFromDevice, $arr);
             $arr=$this->getDataFromDevice($url,"aln");
-            if ( $arr === null) {
+            if ( $arr === null || count($this->dataFromDevice) == 0) {
                 $this->logger->Info( "WasserLeckage: Fehler bei Lesen von aln WasserLeckage");  
                 return null;
             }
@@ -109,8 +115,8 @@ if ($debugval) $this->logger->setDebug(false);
 */
                 }
             }
-if ($debugval) $this->logger->setDebug(false);
-            return $res;
+            if ($debugval) $this->logger->setDebug(false);
+                return $res;
         } catch (\Throwable $e) {
             $message = "WasserLeckage: Fehler bei : " . $e->getMessage();
             $this->logger->Info( $message); 
@@ -125,7 +131,7 @@ if ($debugval) $this->logger->setDebug(false);
 if ($debugval) $this->logger->setDebug(false);
         return $res;
     }
-    private function getDataFromDevice(string $url,$cmd) { 
+    private function getDataFromDevice(string $url,$cmd): ?array { 
         $baseGet=$url . ":5333/trio/get/";
         try {
             $ctx = stream_context_create(['http' => ['timeout' => 10]]);
@@ -133,7 +139,7 @@ if ($debugval) $this->logger->setDebug(false);
 //$this->logger->debugMe("getDataFromDevice xCMD $xCMD");
             $json = @file_get_contents($baseGet . $cmd, false, $ctx);
             if (!$json) {
-            $this->logger->Error( " Catch WasserLeckage: Fehler bei getDataFromDevice : no json");
+            $this->logger->Error( " Catch WasserLeckage: Fehler bei getDataFromDevice : no json Get $baseGet" . "$cmd");
                 return [];
             }
             $data = json_decode($json, true);
@@ -176,7 +182,7 @@ if ($debugval) $this->logger->setDebug(false);
                         'sensorValueType' => $sensor['sensorValueType'],
      *  
      */
-    private function getWasserLeckagedata ($sensor) {
+    private function getWasserLeckagedata ($sensor): ?array {
         $name=$sensor['sensorLokalId'];
         $outputMode=$sensor['outputMode'];
         $sensorID=$sensor['sensorID'];

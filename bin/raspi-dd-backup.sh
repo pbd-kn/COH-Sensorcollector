@@ -40,16 +40,17 @@ STATUS_ABORT="$BACKUP_BASE/abgebrochen_${DATE}.txt"
 SOURCE_DEVICE="/dev/mmcblk0"
 DB_USER_TO_EXPORT_CRON="peter"
 
-SERVICES=(
-  collect
-  heizstab
-  mosquitto
-  raspi-lima-tunnel
-  raspi-local-tunnel
-  mariadb
-)
+DB_USER="peter"
+DB_PASS="sql666sql"
 
-STOPPED_SERVICES=()
+SERVICES=(
+  collect.service
+  heizstab.service
+  mosquitto.service
+  raspi-lima-tunnel.service
+  raspi-local-tunnel.service
+  mariadb.service
+)
 
 ############################
 # FUNKTIONEN
@@ -65,26 +66,24 @@ fail() {
   exit 1
 }
 
+start_all_services() {
+  log "[SERVICE] Starte wichtige Services"
+
+  for s in "${SERVICES[@]}"; do
+    if systemctl start "$s" >/dev/null 2>&1; then
+      log " -> Service gestartet: $s"
+    else
+      log " -> WARNUNG: Service konnte nicht gestartet werden: $s"
+    fi
+  done
+}
+
 cleanup_on_exit() {
   local exit_code=$?
 
-  # Services wieder starten, falls vorher gestoppt
-  if [ "${#STOPPED_SERVICES[@]}" -gt 0 ]; then
-    log "[CLEANUP] Starte gestoppte Services wieder"
-    for s in "${STOPPED_SERVICES[@]}"; do
-      if systemctl list-unit-files | grep -q "^${s}\.service"; then
-        if systemctl start "$s"; then
-          log " -> Service gestartet: $s"
-        else
-          log " -> WARNUNG: Service konnte nicht gestartet werden: $s"
-        fi
-      fi
-    done
-  fi
+  start_all_services || true
 
   sync || true
-
-  # Lock freigeben
   flock -u 9 || true
   rm -f "$LOCKFILE" || true
 
@@ -121,6 +120,7 @@ trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
 ############################
 mkdir -p /var/lock
 exec 9>"$LOCKFILE"
+
 if ! flock -n 9; then
   fail "Es läuft bereits ein Backup"
 fi
@@ -181,7 +181,6 @@ TARGET_FREE_BYTES="$(df -PB1 "$BACKUP_BASE" | awk 'NR==2 {print $4}')"
 log "Quellgröße: $(numfmt --to=iec "$SOURCE_SIZE_BYTES" 2>/dev/null || echo "$SOURCE_SIZE_BYTES Bytes")"
 log "Freier Platz: $(numfmt --to=iec "$TARGET_FREE_BYTES" 2>/dev/null || echo "$TARGET_FREE_BYTES Bytes")"
 
-# Gz-Image ist kleiner als Rohdevice, aber wir prüfen konservativ auf 80%
 REQUIRED_BYTES=$(( SOURCE_SIZE_BYTES * 80 / 100 ))
 
 if [ "$TARGET_FREE_BYTES" -lt "$REQUIRED_BYTES" ]; then
@@ -189,11 +188,27 @@ if [ "$TARGET_FREE_BYTES" -lt "$REQUIRED_BYTES" ]; then
 fi
 
 ############################
+# [0] MariaDB sicher starten
+############################
+log "[0] Stelle sicher, dass MariaDB läuft"
+
+systemctl start mariadb.service >/dev/null 2>&1 || fail "MariaDB konnte nicht gestartet werden"
+sleep 3
+
+############################
 # [1] MariaDB Dump
 ############################
 log "[1] MariaDB Dump startet"
-mysqldump --single-transaction --routines --events --triggers --all-databases \
+
+MYSQL_PWD="$DB_PASS" /usr/bin/mysqldump \
+  -u "$DB_USER" \
+  --single-transaction \
+  --routines \
+  --events \
+  --triggers \
+  --all-databases \
   | gzip -1 > "$MYSQL_DUMP"
+
 log " -> DB Dump fertig: $MYSQL_DUMP"
 
 ############################
@@ -207,11 +222,9 @@ log " -> systemd gesichert"
 tar -czf "$LOGROTATE_BACKUP" /etc/logrotate.d
 log " -> logrotate gesichert"
 
-# root crontab
 crontab -l > "$CRON_BACKUP_ROOT" 2>/dev/null || true
 log " -> root crontab gesichert"
 
-# user crontab von peter, falls vorhanden
 if getent passwd "$DB_USER_TO_EXPORT_CRON" >/dev/null 2>&1; then
   crontab -u "$DB_USER_TO_EXPORT_CRON" -l > "$CRON_BACKUP_USER" 2>/dev/null || true
   log " -> user crontab gesichert: $DB_USER_TO_EXPORT_CRON"
@@ -259,13 +272,6 @@ log " -> System & Konfig gesichert"
 # [3] Zero-Fill
 ############################
 log "[3] Zero-Fill"
-
-# Optional aktivieren:
-# dd if=/dev/zero of=/zero.fill bs=1M status=progress || true
-# sync
-# rm -f /zero.fill
-# sync
-
 log " -> Zero-Fill fertig"
 
 ############################
@@ -274,16 +280,10 @@ log " -> Zero-Fill fertig"
 log "[4] Stoppe Services"
 
 for s in "${SERVICES[@]}"; do
-  if systemctl list-unit-files | grep -q "^${s}\.service"; then
-    if systemctl is-active --quiet "$s"; then
-      log " -> stop $s"
-      systemctl stop "$s"
-      STOPPED_SERVICES+=("$s")
-    else
-      log " -> Service bereits inaktiv: $s"
-    fi
+  if systemctl stop "$s" >/dev/null 2>&1; then
+    log " -> stop $s"
   else
-    log " -> Service nicht gefunden, übersprungen: $s"
+    log " -> WARNUNG: Service konnte nicht gestoppt werden oder existiert nicht: $s"
   fi
 done
 
@@ -294,24 +294,18 @@ sleep 2
 # [5] SD-Backup
 ############################
 log "[5] SD-Backup läuft – NICHT abbrechen"
+
 dd if="$SOURCE_DEVICE" bs=4M status=progress | gzip -1 > "$IMAGE"
+
 sync
 log " -> SD-Backup fertig: $IMAGE"
 
 ############################
 # [6] Services starten
 ############################
-log "[6] Starte Services"
+log "[6] Services starten"
 
-if [ "${#STOPPED_SERVICES[@]}" -gt 0 ]; then
-  for s in "${STOPPED_SERVICES[@]}"; do
-    log " -> start $s"
-    systemctl start "$s"
-  done
-  STOPPED_SERVICES=()
-else
-  log " -> Keine Services mussten neu gestartet werden"
-fi
+start_all_services
 
 ############################
 # [7] Prüfen
@@ -338,4 +332,5 @@ echo "OK $(date '+%F %T')" > "$STATUS_OK"
 log "===================================="
 log "Backup FERTIG"
 log "===================================="
+
 ls -lh "$IMAGE" | tee -a "$LOGFILE"
