@@ -252,7 +252,8 @@ function insertOrTouchHistory(
         $curSource   = trim($source);
 
         if ($curVal === '') {
-            $logger->debugMe("Skip history insert: empty value for sensorID=$sensorID");
+            //$logger->debugMe("Skip history insert: empty value for sensorID=$sensorID");
+            $logger->Info("Skip insert: empty value for sensorID=$sensorID Alter Wert $lastVal $lastEinheit bleibt bestehen");
             $db->commit();
             return;
         }
@@ -284,8 +285,8 @@ function insertOrTouchHistory(
             }
 
             $stmtU->close();
-
-            $logger->debugMe("Touch history: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
+            //$logger->debugMe("Touch history: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
+            $logger->debugMe("Touch insert: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
         } else {
             // INSERT (auch wenn nur Einheit geändert wurde!)
             $ins = "INSERT INTO tl_coh_sensorvalue
@@ -361,7 +362,10 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
         try {
             if ($history === 0) {
                 // genau eine aktuelle Zeile pflegen
-                upsertCurrentValue($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
+                //upsertCurrentValue($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
+                // geändert 28.04.2026 auch aktuelle werte werdn wenn sie identisch sind nur das datum geändert
+                // aufsummierungen über parameter ausgbe im sensor
+                insertOrTouchHistory($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
             } else {
                 // Historie sammeln (aber bei identischem letzten Wert nur tstamp updaten)
                 insertOrTouchHistory($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);

@@ -170,10 +170,55 @@ $data = [
     "CND"  => $dataRaw["getCND"]  ?? 0,
     "WTI"  => $dataRaw["getWTI"]  ?? 0,   // cloud intervall
     "CEN"  => $dataRaw["getCEN"]  ?? 0,   // cloud aktive
-    "DSV"  => $dataRaw["getDSV"]  ?? 0,   // Mikroleckage Status lesen 0-3
-    "DRP"  => $dataRaw["getDRP"]  ?? 0,   // Mikroleckage Intervall lesen 1-3
+    "DSV"  => $dataRaw["getDSV"]  ?? 0,   // Mikroleckage Sensitivität
+                                            //  1	tolerant
+                                            //  2	normal
+                                            //  3	empfindlich
+                                            //  4	sehr empfindlich    
+    "DRP"  => $dataRaw["getDRP"]  ?? 0,   // Mikroleckage Intervall  1-3
+                                            //  GET /trio/get/drp
+                                            //  SET /trio/set/drp/X
+                                            //  1	täglich
+                                            //  2	wöchentlich
+                                            //  3	monatlich
     "DTT"  => $dataRaw["getDTT"]  ?? "04:00", // Mikroleckage Uhrzeit lesen "HH:MM"
-];
+                                            //  /trio/get/dtt
+                                            //  /trio/set/dtt/03:00    
+    "DTC"  => $dataRaw["getDTC"]  ?? "04:00", // Mikroleckage Wiederholungen Wie oft nachgemessen wird.
+                                            //  1	einmal
+                                            //  2	zweimal
+                                            //  3	dreimal    
+    "DOM"  => $dataRaw["getDOM"]  ?? "04:00", // Mikroleckage Beobachtungsdauer Wie lange Druck beobachtet wird. in sec
+    "DST"  => $dataRaw["getDST"]  ?? "04:00", // Mikroleckage Stabilisierung Zeit nach Ventilschluss bevor Messung beginnt. in sec
+    "DMA"  => $dataRaw["getDMA"]  ?? 0,   // Mikroleckage Reaktion bei Mikroleckage / Alarm
+                                            //  0	Nur Warnung, Ventil bleibt offen
+                                            //  1	Warnung + verzögertes Eingreifen
+                                            //  2	Sofort / automatisch schließen
+    "MM"  => $dataRaw["getMM"]  ?? 0,   // Microleak Mode
+                                            //  GET /trio/get/mm
+                                            //  SET /trio/set/mm/X
+                                            //  0	Aus
+                                            //  1	tolerant
+                                            //  2	normal
+                                            //  3	streng    
+    "DBD"  => $dataRaw["getDBD"]  ?? 0,   // Microleak Grenzen für Druckverlust. Je kleiner, desto schneller Alarm.
+    "DPL"  => $dataRaw["getDPL"]  ?? 0,   // Microleak Grenzen für Druckverlust. Je kleiner, desto schneller Alarm.
+    "AMA"  => $dataRaw["getAMA"]  ?? 0,   // Alarm Hauptmodus  ???? Wie Alarme generell behandelt werden.
+                                            //  0	Nur Meldung
+                                            //  1	Normalbetrieb
+                                            //  2	Strenger Modus
+    "ALD"  => $dataRaw["getALD"]  ?? 0,   // Alarm Delay  wartezeit in sec
+                                            //  GET /trio/get/ald
+                                            //  SET /trio/set/ald/X    
+    "SLP"  => $dataRaw["getSLP"]  ?? 0,   // SELBSTLERNUNG / KI Sensitivity Learning Profile Wie aggressiv das Gerät aus Nutzungsdaten lernt.
+                                            //  0 niedrig	tolerant ??
+                                            //  1 hoch	strenger ??
+    "SLE"  => $dataRaw["getSLE"]  ?? 0,   // SELBSTLERNUNG / KI Sensitivity Lernzähler Profile Wie viele Lernvorgänge / Datensätze gesammelt wurden.
+    "SLV"  => $dataRaw["getSLV"]  ?? 0,   // SELBSTLERNUNG / KI Sensitivity Learned Volume Typische gelernte Wassermenge.
+    "SLT"  => $dataRaw["getSLT"]  ?? 0,   // SELBSTLERNUNG / KI Sensitivity Learned Time Typische gelernte Nutzungsdauer.
+    "SLF"  => $dataRaw["getSLT"]  ?? 0,   // SELBSTLERNUNG / KI Sensitivity Learned Flow Typische gelernte Durchfluss.
+    "SOF"  => $dataRaw["getSOF"]  ?? 0,   // SELBSTLERNUNG / KI Shutoff Factor ?? Wie schnell aus Lernwerten abgesperrt wird.
+];   
 
 // diese werte kommen bei all falsch zurück
 $data["ALM"] = syrGet("ALM", $baseGet);
@@ -388,17 +433,10 @@ function decodeMicroStatus($val)
 $alarmStatus = decodeAlarm($data["ALA"] ?? null);
 $state = $alarmStatus[1];
 switch ($state) {
-    case 'ok':
-        $status = 'OK';
-        break;
-    case 'warn':
-        $status = 'WARNUNG';
-        break;
-    case 'alarm':
-        $status = 'ALARM';
-        break;
-    default:
-        $status = 'UNBEKANNT';
+    case 'ok': $status = 'OK';break;
+    case 'warn': $status = 'WARNUNG'; break;
+    case 'alarm': $status = 'ALARM'; break;
+    default: $status = 'UNBEKANNT';
 }
 // ---------------------------------------------------
 // WLAN Status
@@ -422,8 +460,18 @@ function decodeWifiStatus($wfs)
 
 <style>
 body{font-family:Arial;background:#f4f6f8;margin:20px;}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;}
-.card{background:#fff;padding:15px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);}
+.coh-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+}
+.coh-mini-box {
+    background: #f7fafc;
+    border: 1px solid #e4edf3;
+    border-radius: 10px;
+    padding: 8px;
+    min-width: 0; /* WICHTIG */
+}
 .big{font-size:22px;font-weight:bold;}
 
 .badge-ok{color:green;}
@@ -521,8 +569,8 @@ if ($msg !== '') {
 <br>
 &nbsp;
 
-<div class="grid">
-    <div class="card">
+<div class="coh-mini-grid">
+    <div class="coh-mini-box">
         <div>🚰 Ventil</div>
         <div class="big"><?= htmlspecialchars($valve) ?></div>
         <div style="margin-top:10px; display:flex; gap:5px;">
@@ -553,7 +601,7 @@ switch ($state) {
         break;
 }
 ?>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>AlarmStatus</div>
         <div class="big">
             <?= $lamp ?> <?= htmlspecialchars($status) ?>
@@ -561,28 +609,28 @@ switch ($state) {
         <div>Leckagetest</div>
         <div><?= $leak['text'] ?></div>       
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>Batterie</div>
         <div class="big"><?= (int)$batPercent ?> %</div>
         <div><?= number_format($batVolt,2) ?> V</div>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>💧 Durchfluss</div>
         <div class="big"><?= htmlspecialchars((string)$flow) ?> l/h</div>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>📊 Ges. Verbrauch</div>
         <div class="big"><?= htmlspecialchars((string)$gesVol) ?> l</div>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>🧭 Druck</div>
         <div class="big"><?= number_format($pressure,2) ?> bar</div>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>🌡️Temperatur</div>
         <div class="big"><?= htmlspecialchars((string)$temp) ?> °C</div>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>⚙️Profil</div>
         <div class="big"><?= (int)$prf ?></div>
         <form method="post" class="profile-form">
@@ -596,14 +644,14 @@ switch ($state) {
             <button type="submit" name="setProfile">OK</button>
         </form>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>🧪 Wasserhärte</div>
         <div class="big"><?= hardnessDots($dH) ?></div>
         <div><?= htmlspecialchars((string)$dH) ?> °dH (geschätzt)</div>
         <div>Leitwert: <?= htmlspecialchars((string)$leitWert) ?> µS/cm</div>
         <div>berechnete Härte Leitwert/30 <?= htmlspecialchars((string)($leitWert/30)) ?> °dH</div>
     </div>
-    <div class="card">
+    <div class="coh-mini-box">
         <div>☁️ Cloud</div>
         <div>
             aktiv: <?= !empty($data['CEN']) ? 'ja' : 'nein' ?><br>
