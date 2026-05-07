@@ -863,7 +863,7 @@ function decodeWifiStatus($wfs)
                 </span>
             </div>
             <div class="row">
-                <span>Zeitleckage</span>
+                <span>Zeitleckage Zeit in der das Volumenleckage überprüft wird</span>
                 <span>
                     <?= htmlspecialchars((string)$pt) ?> min
                     <span class="edit-btn" onclick="openEdit('pt', <?= (int)$pt ?>)">✏️</span>
