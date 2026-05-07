@@ -17,7 +17,7 @@ class WasserLeckageService implements SensorFetcherInterface
      
     public function supports( $sensor): bool
     {
-return false;                          // keine daten von SYR
+//return false;                          // keine daten von SYR
         if (strtolower($sensor['sensorSource']) === 'wasserleckage') {
             $this->logger->debugMe( "WasserLeckageService supports " . $sensor['sensorSource']);
             $now = new \DateTime();                 // aktuelle Serverzeit

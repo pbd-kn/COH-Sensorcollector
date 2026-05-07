@@ -386,6 +386,7 @@ $pressure = isset($data["BAR"]) ? ($data["BAR"] / 1000) : 0;
 $flow = $data["FLO"] ?? 0;
 $gesVol = $data["VOL"] ?? 0;
 $leitWert = $data["CND"] ?? 0;
+$dH = round($leitWert/30,2);
 
 $valveMap = [
     10 => "ZU",
@@ -840,8 +841,8 @@ function decodeWifiStatus($wfs)
                 <div class="coh-mini-box">
                     <div>🧪 Wasserhärte</div>
                     <div class="big"><?= hardnessDots($dH) ?></div>
-                    <div><?= $dH ?> °dH</div>
-                    <div><?= $leitWert ?> µS/cm</div>
+                    <div><?= $dH ?> °dH<br>aus</div>
+                    <div>Leitwert <?= $leitWert ?> µS/cm / 30</div>
                 </div>
                 <div class="coh-mini-box">
                     <div>☁️ Cloud</div>
