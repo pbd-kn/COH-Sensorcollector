@@ -921,10 +921,10 @@ function decodeWifiStatus($wfs)
             <summary> Mikroleckage Diagnosewerte</summary>
             <div class="row"><span>(DBD) Mikroleckage Microleak Grenzen für Druckverlust. Je kleiner, desto schneller Alarm.</span><span><?= htmlspecialchars((string)($data["DBD"] ?? '-')) ?></span></div>
             <div class="row"><span>(DPL) Mikroleckage Microleak Grenzen für Druckverlust. Je kleiner, desto schneller Alarm.</span><span><?= htmlspecialchars((string)($data["DPL"] ?? '-')) ?></span></div>
-            <div class="row"><span>(DBT) Mikroleckage Microleak Drucktest / Zeitwert</span><span><?= htmlspecialchars((string)($data["DBT"] ?? '-')) ?></span></div>
-            <div class="row"><span>(DST) Mikroleckage Stabilisierung Zeit nach Ventilschluss bevor Messung beginnt. in sec</span><span><?= htmlspecialchars((string)($data["DST"] ?? '-')) ?></span></div>
+            <div class="row"><span>(DST) Mikroleckage Zeit ohne Impuls / noPulse-Zeit in Min</span><span><?= htmlspecialchars((string)($data["DST"] ?? '-')) ?></span></div>
+            <div class="row"><span>(DOM) Mikroleckage Messzeit Wie lange Druck beobachtet wird. in sec</span><span><?= htmlspecialchars((string)($data["DOM"] ?? '-')) ?></span></div>
+            <div class="row"><span>(DBT) Mikroleckage Empfindlichkeit Druckabfall Microleak Drucktest / Zeitwert</span><span><?= htmlspecialchars((string)($data["DBT"] ?? '-')) ?></span></div>
             <div class="row"><span>(DCM) Mikroleckage Interner Bewertungsmodus ????</span><span><?= htmlspecialchars((string)($data["DCM"] ?? '-')) ?></span></div>
-            <div class="row"><span>(DOM) Mikroleckage Beobachtungsdauer Wie lange Druck beobachtet wird. in sec</span><span><?= htmlspecialchars((string)($data["DOM"] ?? '-')) ?></span></div>
             <div class="row"><span>(DTC) Mikroleckage Wiederholungen Wie oft nachgemessen wird Anzahl</span><span><?= htmlspecialchars((string)($data["DTC"] ?? '-')) ?></span></div>
             <div class="row"><span>(DMA) Mikroleckage Reaktion bei Mikroleckage / Alarm<br>0 Nur Warnung Ventil bleibt offen<br>1 Warnung + verzögertes Eingreifen<br> 2 Sofort / automatisch schließen</span><span><?= htmlspecialchars((string)($data["DMA"] ?? '-')) ?></span></div>
             <div class="row"><span>(MM) Microleak Mode<br>0 aus<br>1 tolerant<br> 2 normal<br>3 streng</span><span><?= htmlspecialchars((string)($data["MM"] ?? '-')) ?></span></div>
