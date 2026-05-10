@@ -201,7 +201,7 @@ function getHeizstabdata ($data) {
   global $aktData,$setupData,$logger;
   if (isset($aktData[$data]) )  {  return $aktData[$data];}    
   else if (isset($setupData[$data]) )  {  return $setupData[$data];}    
-  else return false;
+  else return 0;
 }
 /*
  * liest einen Status von der IQbox
@@ -291,6 +291,9 @@ function heizen($modus) {
       $url1=$urlheizStab.'setup.jsn?bstmode=0';
       $url2=$urlheizStab.'data.jsn?bststrt=0';
     }
+  } else {
+    $logger->Error("Heizen Fehler Modus Heizstab $modus ");
+    return false;
   }
   $logger->Info("Heizen Modus Heizstab $modus ");
   $logger->debugMe("Heizen Modus Heizstab $steuerungseinstellung url1: $url1 url2: $url2");
