@@ -153,7 +153,7 @@ function getdata() {
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        $logger->Error("!!! cURL Error:  url: $url"); 
+        $logger->Error("!!! cURL getData Error:  url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
@@ -177,7 +177,7 @@ function getsetup() {
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        $logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); 
+        $logger->Error("!!! cURL getsetup Error:  url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
