@@ -84,7 +84,7 @@ class Logger
     private function addDebugInfoToText(string $text, bool $full): string
     {
         // Hole den aktuellen Stack-Trace und extrahiere Informationen
-        $cTime = date('H:i');    // akt. Zeit
+        $cTime = date('d.m.Y H:i:s');
         $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
         $caller = $backtrace[1];
 

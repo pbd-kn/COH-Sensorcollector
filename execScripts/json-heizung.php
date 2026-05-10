@@ -153,7 +153,7 @@ function getdata() {
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        $logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); 
+        $logger->Error("!!! cURL Error:  url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
@@ -222,16 +222,31 @@ function getfromIQbox ($path) {
 }
 
 // CURL-Request Funktion, um Redundanz zu vermeiden
-function curlRequest($url) {
+function curlRequest($url)
+{
     global $logger;
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     $content = curl_exec($ch);
+    // cURL Fehler (Timeout / Host nicht erreichbar usw.)
     if ($content === false) {
-        $logger->Error("!!! cURL Error: " . curl_error($ch) . " url: $url");
+        $errno = curl_errno($ch);
+        $error = curl_error($ch);
+        $logger->Error(
+            "!!! cURL Fehler [$errno]: $error URL: $url"
+        );
+        curl_close($ch);
+        return false;
+    }
+    // HTTP Status prüfen
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($httpCode >= 400) {
+        $logger->Error(
+            "!!! cURL HTTP Fehler [$httpCode] URL: $url"
+        );
         curl_close($ch);
         return false;
     }
