@@ -153,19 +153,19 @@ function getdata() {
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        $logger->Error("!!! cURL getData Error:  url: $url"); 
+        //$logger->Error("!!! cURL getData Error:  url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
       $data = json_decode($content,true);
       if ($data === null) {
-        $logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes  url $url");
+        //$logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes  url $url");
         sleep(10); // Warte 10 sec
         continue;
       }
       return $data;
     }
-    $logger->Error("!!! Fehler nach 10 maligen Aufruf");
+    $logger->Error("!!! Fehler nach 10 maligen Aufruf url $url");
     return false;
 }
 // liest die setup.jsn vom Heizstab und gibt sie als Array zurück
@@ -177,20 +177,20 @@ function getsetup() {
     for ($i = 1; $i <= 10; $i++) {
       $content=curlRequest($url);
       if ($content === false) {
-        $logger->Error("!!! cURL getsetup Error:  url: $url"); 
+        //$logger->Error("!!! cURL getsetup Error:  url: $url"); 
         sleep(10); // Warte 10 sec
         continue;
       }
       if ($content === false) {$logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); return false;}
       $data = json_decode($content,true);
       if ($data === null) {
-        $logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes url $url");
+        //$logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes url $url");
         sleep(10); // Warte 10 sec
         continue;
       }
       return $data;
     }
-    $logger->Error("!!! Fehler nach 10 maligen Aufruf");
+    $logger->Error("!!! Fehler nach 10 maligen Aufruf url $url");
     return false;
 }
 
@@ -292,7 +292,7 @@ function heizen($modus) {
       $url2=$urlheizStab.'data.jsn?bststrt=0';
     }
   } else {
-    $logger->Error("Heizen Fehler Modus Heizstab $modus ");
+    $logger->Error("Heizen Fehler Modus Heizstab ctrl $steuerungseinstellung ");
     return false;
   }
   $logger->Info("Heizen Modus Heizstab $modus ");
@@ -516,7 +516,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   if ( $stateBatterie < 10 ) { $hysterese=$hystereseSoll; }
   if (($hysterese >0) && ($stateBatterie > $hystereseSoll)) $hysterese=0;    // zurücksetzen
   if ($Booststat != 0) {  // heizstab an
-    $logger->Info("heizstab heizung läuft noch"); 
+    $logger->debugMe("heizstab heizung läuft noch"); 
     if ($hysterese != 0 && ($stateBatterie < 10 || $stateBatterie < $hystereseSoll)) {  // Hysterese Modus warten bis hystereseSoll erreicht 
       heizen(0) ; 
       $logger->Info("heizstab ausschalten SOC = $stateBatterie hysterese $hysterese  warten auf hysterese"); 

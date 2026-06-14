@@ -139,13 +139,16 @@ if ($debugval) $this->logger->setDebug(false);
             $xCMD = $baseGet . $cmd;
 //$this->logger->debugMe("getDataFromDevice xCMD $xCMD");
             $json = @file_get_contents($baseGet . $cmd, false, $ctx);
-            if (!$json) {
-            $this->logger->Error( " Catch WasserLeckage: Fehler bei getDataFromDevice : no json Get $baseGet" . "$cmd");
+            $respHeaders = $http_response_header ?? [];
+            $status = $respHeaders[0] ?? 'kein HTTP Status';
+            if ($json === false) {
+                $err = error_get_last();
+                $this->logger->Error( " Catch WasserLeckage: Fehler " . $err['message'] ?? 'unbekannt' . " Http Status $status bei getDataFromDevice : no json Get $baseGet" . "$cmd");
                 return [];
             }
             $data = json_decode($json, true);
             if (!is_array($data)) {
-            $this->logger->Error( " Catch WasserLeckage: Fehler bei decode ");
+                $this->logger->Error( " Catch WasserLeckage: Fehler bei decode json array json $json");
                 return [];
             }
         } catch (\Throwable $e) {
