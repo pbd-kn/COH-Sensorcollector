@@ -14,6 +14,12 @@ class HeizstabSensorService implements SensorFetcherInterface
 
     private ?array $aktData  = null;
     private ?array $setupData  = null;
+    private $heizstabCookieFile = '/home/peter/scripts/coh/cookies/heizstab_cookie.txt';
+    private $loginPath = (string)'/auth.jsn';       // pfad zum auth request
+    private $password = '14881488';                 // passwort für auth login
+    private $passwordField = 'pw';                  // feld für den auth request
+    private $insecureTls = false;                   // TLS-/HTTPS-Zertifikatsprüfung ausschalten ja/nein.
+
 
     public function __construct( private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient) {}        
     
@@ -36,7 +42,7 @@ class HeizstabSensorService implements SensorFetcherInterface
                 $url=$sensors[0]['geraeteUrl'];
                 $this->logger->debugMe('Heizstab Sensorservice  url '.$url.' len sensors:'.count($sensors));    
                 if ($url && !str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
-                    $url = 'http://' . $url;
+                    $url = 'https://' . $url;
                 }
             } 
         
@@ -121,8 +127,20 @@ if ($debugval) $this->logger->setDebug(false);
     }
     private function getDataFromDevice(string $url) { 
         try {
-            $v1=$this->getdata($url);
-            $v2=$this->getsetup($url);
+            $this->ensureElwaLogin           $url, '/auth.jsn', $this->passwordField, $this->password, $this->heizstabCookieFile, $this->insecureTls);
+            $v1=fetchJsonWithRelogin($url, '/data.jsn', $this->passwordField, $this->password, $this->heizstabCookieFile, $this->insecureTls);
+            if ($v1 == null) {
+            } else {
+                $this->aktData=$v1;
+            }
+            $v2=fetchJsonWithRelogin($url, '/setup.jsn', $this->passwordField, $this->password, $this->heizstabCookieFile, $this->insecureTls);
+            if ($v2 == null) {
+            } else {
+                $this->setupData=$v2;
+            }
+            
+            //$v1=$this->getdata($url);
+            //$v2=$this->getsetup($url);
             if ($v1 === null || $v2 === null) {
               $this->logger->debugMe( "Heizstab: Fehler bei Lesen der daten vom Heizstab");  
               return null;             
@@ -134,6 +152,58 @@ if ($debugval) $this->logger->setDebug(false);
         return "OK";
         
     }
+    private function fetchJsonWithRelogin( string &$baseUrl, string $path, string $loginPath, string $passwordField, string $password, string $cookieFile, bool &$insecureTls): array
+    {
+        $url = $this->buildUrl($baseUrl, $path);
+        $result = curlGet($url, $cookieFile, $insecureTls);
+
+        if (shouldSwitchToHttps($baseUrl, $result['http_code'], $result['body'])) {
+            $baseUrl = switchBaseUrlToHttps($baseUrl);
+            echo "$path HTTP->HTTPS Redirect erkannt, neuer Base URL: $baseUrl\n";
+            @unlink($cookieFile);
+            ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls);
+
+            $url = $this->buildUrl($baseUrl, $path);
+            $result = curlGet($url, $cookieFile, $insecureTls);
+        }
+
+        if (in_array($result['http_code'], [301, 302, 303, 401, 403], true)) {
+            echo "$path Session abgelaufen oder Login erforderlich (HTTP {$result['http_code']}). Re-Login ...\n";
+            @unlink($cookieFile);
+            $loginResponse = elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls);
+            echo "Re-Login OK\n";
+            echo "Login Antwort:\n";
+            echo trim($loginResponse) . "\n\n";
+
+            $result = curlGet($url, $cookieFile, $insecureTls);
+        }
+
+        if ($result['http_code'] !== 200) {
+            throw new RuntimeException("GET HTTP Fehler {$result['http_code']} fuer $url Antwort: {$result['body']}");
+        }
+
+        $response = $result['body'];
+        $decoded = json_decode($response, true);
+
+        echo "$path HTTP OK\n";
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new RuntimeException(
+                "Antwort von $path ist kein JSON: " . json_last_error_msg() . " Antwort: " . trim($response)
+            );
+        }
+
+        if (!is_array($decoded)) {
+            throw new RuntimeException("Antwort von $path ist JSON, aber kein Array");
+        }
+
+        return $decoded;
+    }
+    private function buildUrl(string $baseUrl, string $path): string
+    {
+        return rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+    }        
+/* obsolet
     // liest die data.jsn vom Heizstab und gibt sie als Array zurück
     // liefert False bei einem Fehler
     private function getdata($url) {
@@ -157,6 +227,7 @@ if ($debugval) $this->logger->setDebug(false);
         $this->setupData=$data;
         return $data;
     }
+*/
     /*  liefert den wert vom Heizstab aus global $aktData,$setupData;
      *  
      */
@@ -172,6 +243,71 @@ $this->logger->debugMe (" getHeizstabdata return $sensorID " . $this->setupData[
             return null;
         }
     } 
+    /*  
+     * https Login funktionen
+     */
+    private function ensureElwaLogin(string &$baseUrl,string $loginPath,string $passwordField,string $password,string $cookieFile,bool &$insecureTls): void {
+        if (file_exists($cookieFile) && filesize($cookieFile) > 0) {
+            echo "Cookie vorhanden, Login wird wiederverwendet.\n";
+            return;
+        }
+
+        echo "Kein Cookie vorhanden, Login wird ausgeführt.\n";
+        $loginResponse = elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls);
+        echo "Login OK\n";
+        echo "Login Antwort:\n";
+        echo trim($loginResponse) . "\n\n";
+    }
+
+    private function elwaLogin(string &$baseUrl,string $loginPath,string $passwordField,string $password,string $cookieFile,bool &$insecureTls): string {
+        $url = buildUrl($baseUrl, $loginPath);
+        $ch = curl_init($url);
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query([$passwordField => $password]),
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json',
+            ],
+            CURLOPT_COOKIEJAR      => $cookieFile,
+            CURLOPT_COOKIEFILE     => $cookieFile,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_FOLLOWLOCATION => false,
+        ]);
+
+        applyTlsOptions($ch, $insecureTls);
+
+        $response = curl_exec($ch);
+        if ($response === false) {
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if (!$insecureTls && isSelfSignedCertificateError($error)) {
+                $insecureTls = true;
+                echo "Selbstsigniertes Zertifikat erkannt, TLS-Prüfung wird für diesen Test deaktiviert.\n";
+                return elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls);
+            }
+
+            throw new RuntimeException('ELWA Login fehlgeschlagen: ' . $error);
+        }
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (shouldSwitchToHttps($baseUrl, $code, (string)$response)) {
+            $baseUrl = switchBaseUrlToHttps($baseUrl);
+            echo "HTTP->HTTPS Redirect erkannt, neuer Base URL: $baseUrl\n";
+            return elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls);
+        }
+
+        if (!in_array($code, [200, 204, 302, 303], true)) {
+            throw new RuntimeException('ELWA Login HTTP Fehler: ' . $code . ' Antwort: ' . $response);
+        }
+
+        return (string)$response;
+    }     
     /*
      *  Routinen zur Anpassung des Values wird in der Konfig des Servers unter transFormProcedur angegheben
      */

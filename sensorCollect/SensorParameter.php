@@ -24,7 +24,7 @@ class SensorParameter
     private string $pollTime;
     private array $data = [];
 
-    // Konstruktor privat ? verhindert new von auﬂen
+    // Konstruktor privat ? verhindert new von au√üen
     private function __construct() {}
     // ---------------------------
     // Singleton Zugriff

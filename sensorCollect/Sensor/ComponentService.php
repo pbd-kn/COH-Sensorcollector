@@ -63,7 +63,7 @@ $this->logger->debugMe( "ComponentService bearbeiteten Sensor lokalAccess $lokal
                     $this->logger->debugMe('ComponentService: keine gültigen Komponenten-Sensoren bei '.$lokalAccess);
                     continue;
                 }
-//$this->logger->debugMe( "ComponentService bearbeiteten lokalAccess $lokalAccess pruefungen ok");
+//$this->logger->debugMe( "ComponentService bearbeiteten lokalAccess $lokalAccess prüfungen ok");
                 $conn = $this->db->getConnection();
                 $escaped = array_map([$conn,'real_escape_string'],$selectedSensors);
                 $inList  = "'" . implode("','",$escaped) . "'";  // alle sensoren der componente in einen kommagetrennten String
@@ -114,7 +114,7 @@ $this->logger->debugMe( "ComponentService bearbeiteten Sensor lokalAccess $lokal
                 $this->logger->debugMe("ComponentService: formula= $formula result=$value");                             
                 if ($value === null) { $this->logger->debugMe('Compute Sensorservice keinen wert für sensorID: '.$sensor['sensorID']);
                 } else { 
-$this->logger->debugMe("ComponentService: set result fuer " . $sensor['sensorID']);                  
+$this->logger->debugMe("ComponentService: set result für " . $sensor['sensorID']);
                     $res[$sensor['sensorID']] = [
                         'sensorID'        => $sensor['sensorID'],
                         'sensorValue'     => $value,

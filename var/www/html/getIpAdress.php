@@ -11,7 +11,7 @@ $isCli = (php_sapi_name() === 'cli');
 $runMode = $isCli ? 'cron/cli' : 'browser';
 
 // ---------------------------------------------------
-// Ger‰te-Mapping
+// Ger√§te-Mapping
 // ---------------------------------------------------
 
 $deviceMap = [

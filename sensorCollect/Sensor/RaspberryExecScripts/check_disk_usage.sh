@@ -36,11 +36,10 @@ WHERE tstamp < UNIX_TIMESTAMP(NOW() - INTERVAL 6 MONTH);
   printf "Subject: %s\nFrom: pbd@gmx.de\nTo: %s\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n\n%s\n" \
   "$SUBJECT" "$TO" "$BODY" | msmtp -a gmx "$TO"
 else
-  echo "$NOW - geprueft (USAGE=${USAGE}%, LIMIT=${LIMIT}%)" >> "$LOGFILE"
+  echo "$NOW - geprüft (USAGE=${USAGE}%, LIMIT=${LIMIT}%)" >> "$LOGFILE"
 fi
 
 # ergebnis als JSON manuell als String bauen
 json="[ { \"Partition\": \"${PART}\", \"value\": ${USAGE}, \"einheit\": \"%\" } ]"
 echo "$json"
-
 

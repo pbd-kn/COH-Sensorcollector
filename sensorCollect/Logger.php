@@ -17,7 +17,7 @@ class Logger
     private string $logfile ="";
     private bool $debug = false;
     private $logfileHandle = null;
-    // Variablen für späte Initialisierung
+    // Variablen fÃ¼r spÃ¤te Initialisierung
     private static ?Logger $instance = null;
     private ?StreamHandler $streamHandler = null;
     
@@ -27,7 +27,7 @@ class Logger
         $this->debug=$debug;
         if ($logfile) { 
             $dir = dirname($logfile);
-                // nur öffnen, wenn Verzeichnis existiert und beschreibbar ist
+                // nur Ã¶ffnen, wenn Verzeichnis existiert und beschreibbar ist
             if (is_dir($dir) && is_writable($dir)) {
                 $this->logfile=$logfile;
                 $this->logfileHandle = @fopen($logfile, 'a');
@@ -97,7 +97,7 @@ class Logger
         return $this->debug;
     }
     
-    /* füege modul funktion und zeile dazu
+    /* fÃ¼ege modul funktion und zeile dazu
      *
      */
     private function addDebugInfoToText(string $text): string
@@ -116,7 +116,7 @@ class Logger
         // Baue den Log-Text mit dem Modulnamen (Dateiname, Zeilennummer und Funktionsname) zusammen
         $logInfo = sprintf('[%s:%d] %s : %s', basename($file), $line, $function, $text);
 
-        // Rückgabe des erweiterten Text
+        // RÃ¼ckgabe des erweiterten Text
         return $logInfo."\n";
     }
 

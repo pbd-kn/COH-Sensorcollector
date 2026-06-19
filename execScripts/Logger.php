@@ -81,7 +81,7 @@ class Logger
     /* füege modul funktion und zeile dazu
      *
      */
-    private function addDebugInfoToText(string $text, bool $full): string
+    private function addDebugInfoToText(string $text, bool $full = true): string
     {
         // Hole den aktuellen Stack-Trace und extrahiere Informationen
         $cTime = date('d.m.Y H:i:s');

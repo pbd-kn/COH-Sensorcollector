@@ -39,13 +39,13 @@ class SensorManager
                 if ($fetcher->supports($sensor)) {
                     if ($sensor['isHistory'] === '1') {
                         $sensorID = $sensor['sensorID'];
-                        $history=$sensor['history'];     // kennzeichnung wie oft gepollt wird bei history = 1 muss gepollt werden historycount nicht berücksichtigen
+                        $history=$sensor['history'];     // kennzeichnung wie oft gepollt wird bei history = 1 muss gepollt werden historycount nicht berÃ¼cksichtigen
                         $historycount = $sensor['historycount'] ; // bei historycount <= 0 muss gepollt werden
                             /* 'history' => [
-                                'label' => ['Speichern', '0 = nein, 1 = polltime, 2 = stündlich, 3 = täglich, 4 = wöchentlich, 5 = monatlich'],
+                                'label' => ['Speichern', '0 = nein, 1 = polltime, 2 = stÃ¼ndlich, 3 = tÃ¤glich, 4 = wÃ¶chentlich, 5 = monatlich'],
                                 'inputType' => 'select',
                                 'options'   => [0,1,2,3,4,5],
-                                'reference' => ['Nein','Polltime','Stündlich','Täglich','Wöchentlich','Monatlich'],
+                                'reference' => ['Nein','Polltime','StÃ¼ndlich','TÃ¤glich','WÃ¶chentlich','Monatlich'],
                                 'eval'      => ['tl_class'=>'w50'],
                                 'sql'       => "tinyint(1) NOT NULL default '0'",
                                 ],
@@ -54,9 +54,9 @@ class SensorManager
                         switch ($history) {
                             case 0:  $text = 'Null'; continue 2;  // gehe 2 noch oben als switch und foreach
                             case 1:  $text = 'pollTime';  $supported[] = $sensor; continue 2;
-                            case 2:  $text = 'Stündlich';  $maxcount = (int)(60 / $pollTime);  break;
-                            case 3:  $text = 'Täglich'; $maxcount = (int)(60*12 / $pollTime); break;
-                            case 4:  $text = 'Wöchentlich'; $maxcount = (int)(60*12*7 / $pollTime); break;
+                            case 2:  $text = 'StÃ¼ndlich';  $maxcount = (int)(60 / $pollTime);  break;
+                            case 3:  $text = 'TÃ¤glich'; $maxcount = (int)(60*12 / $pollTime); break;
+                            case 4:  $text = 'WÃ¶chentlich'; $maxcount = (int)(60*12*7 / $pollTime); break;
                             case 5:  $text = 'Monatlich';  $maxcount = (int)(60*12*7*30 / $pollTime); break;
                             default: $text = 'Null'; continue 2;
                         }
@@ -88,12 +88,12 @@ class SensorManager
             }            
             if (!empty($supported)) {
                 $this->logger->debugMe( "Fetcher " . get_class($fetcher) . " verarbeitet " . count($supported) . " Sensoren");
-                $data = $fetcher->fetchArr($supported); // <- Jetzt wird ein Array übergeben
+                $data = $fetcher->fetchArr($supported); // <- Jetzt wird ein Array Ã¼bergeben
                 if (is_array($data)) {
                     $allData = array_merge($allData, $data);
                 }
             } else {
-                $this->logger->debugMe( "Keine Sensoren fuer ". get_class($fetcher));           
+                $this->logger->debugMe( "Keine Sensoren fÃ¼r ". get_class($fetcher));
             }
         }
         return $allData;
