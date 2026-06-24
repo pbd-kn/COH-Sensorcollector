@@ -111,10 +111,7 @@ class HeizstabSensorService implements SensorFetcherInterface
     {
         try {
             $cloudAccess = $this->parseCloudApiAccess($access);
-            if ($cloudAccess === false) {
-                return null;
-            }
-
+            if ($cloudAccess === false) { return null; }
             if ($cloudAccess !== null) {
                 [$serial, $apiKey] = $cloudAccess;
                 return $this->getDataFromCloudApi($serial, $apiKey);
@@ -156,21 +153,17 @@ class HeizstabSensorService implements SensorFetcherInterface
             || filter_var($access, FILTER_VALIDATE_IP)
             || str_contains($access, '.')
             || str_contains($access, '/')
-        ) {
-            return null;
-        }
+        ) { return null;}
 
         [$serial, $apiKey] = array_map('trim', explode(':', $access, 2));
         if (!preg_match('/^[0-9]{8,20}$/', $serial)) {
             $this->logger->Error("Heizstab: serial '$serial' fehlerhaft");
             return false;
         }
-
         if (strlen($apiKey) < 20 || preg_match('/^[A-Za-z0-9._-]+$/', $apiKey) !== 1) {
             $this->logger->Error("Heizstab: serial '$serial' Api key fehlerhaft");
             return false;
         }
-
         return [$serial, $apiKey];
     }
 
@@ -260,10 +253,11 @@ class HeizstabSensorService implements SensorFetcherInterface
 
     private function getDataFromCloudApi(string $serial, string $apiKey)
     {
+        $this->logger->debugMe('Heizstab Sensorservice getDataFromCloudApi serial $serial apiKey $apiKey' . count($sensors));    
         $v1 = $this->cloudApiGetJson($serial, $apiKey, 'data');
         $v2 = $this->cloudApiGetJson($serial, $apiKey, 'setup');
         if ($v1 === null || $v2 === null) {
-            $this->logger->Error('Heizstab: Fehler bei Lesen der Daten ueber my-PV Cloud API');
+            $this->logger->Error('getDataFromCloudApi Heizstab: Fehler bei Lesen der Daten ueber my-PV Cloud API');
             return null;
         }
 

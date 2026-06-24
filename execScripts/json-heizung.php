@@ -14,6 +14,8 @@ $logf="/home/peter/coh/logs/heizstabserver.log";
 $logger = new Logger();
 $logger->setLogfile ($logf);
 $logger->setDebug($debug);
+$logger->Info("json-heizung nicht parallel zu regelung über IQbox");
+exit;                           // abbruch, da json-hizung.php und iqbox steuerung des Heizstabe kritisch ist
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
@@ -151,7 +153,10 @@ function configureHeizstabApi(array $params): void
 
 function isHeizstabApiEnabled(): bool
 {
-    global $heizstabApi;
+    global $heizstabApi, $logger;
+    //Wenn $heizstabApi['enabled'] gesetzt ist und einen „wahren“ Wert hat → true
+    //Wenn es fehlt, leer, false, 0, "0", null oder "" ist → false
+    $logger->debugMe("isHeizstabApiEnabled " . !empty($heizstabApi['enabled']));
 
     return !empty($heizstabApi['enabled']);
 }
@@ -159,11 +164,7 @@ function isHeizstabApiEnabled(): bool
 function getHeizstabApiToken(): string
 {
     global $heizstabApi;
-
-    if ($heizstabApi['apiToken'] !== '') {
-        return $heizstabApi['apiToken'];
-    }
-
+    if ($heizstabApi['apiToken'] !== '') { return $heizstabApi['apiToken'];}   // so arbeit ich notfall wird noch in env geschaut
     $envToken = getenv($heizstabApi['apiTokenEnv']);
     return is_string($envToken) ? $envToken : '';
 }
@@ -184,14 +185,12 @@ function heizstabApiRequest(string $method, string $endpoint, ?array $payload = 
         $logger->Error('my-PV API aktiv, aber serial oder apiToken fehlt');
         return false;
     }
-
-    $url = buildHeizstabApiUrl($endpoint);
+    $url = buildHeizstabApiUrl($endpoint);                 // endpoint ist die angabe der neuen apischnittstelle s. https://api.my-pv.com/api-docs/#/
     $headers = [
         'Authorization: Bearer ' . $token,
         'Accept: application/json',
         'Content-Type: application/json',
     ];
-
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -199,32 +198,26 @@ function heizstabApiRequest(string $method, string $endpoint, ?array $payload = 
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER     => $headers,
     ]);
-
     if (!empty($heizstabApi['insecureTls'])) {
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     }
-
-    if ($method !== 'GET') {
+    if ($method !== 'GET') {                                    // mache einen post mit der $method  in pyload wird das feld für den p ostrequest übergeben
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload ?? [], JSON_UNESCAPED_SLASHES));
     }
-
     $response = curl_exec($ch);
     if ($response === false) {
         $logger->Error('my-PV API cURL Fehler: ' . curl_error($ch) . " URL: $url");
         curl_close($ch);
         return false;
     }
-
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-
     if ($code < 200 || $code >= 300) {
         $logger->Error("my-PV API HTTP Fehler [$code] URL: $url Antwort: " . trim((string)$response));
         return false;
     }
-
     return (string)$response;
 }
 
@@ -236,7 +229,6 @@ function heizstabApiGetJson(string $endpoint)
     if ($response === false) {
         return false;
     }
-
     $data = json_decode($response, true);
     if (!is_array($data)) {
         $logger->Error("my-PV API Antwort ist kein JSON-Array Endpoint: $endpoint Antwort: " . trim($response));
@@ -249,18 +241,16 @@ function heizstabApiGetJson(string $endpoint)
 function heizstabApiSetPower(int $power): bool
 {
     global $heizstabApi, $logger;
-
-    $payload = [
+    $payload = [                // pst-Parameter zum setzen von Power
         'power'                 => max(0, $power),
         'validForMinutes'       => $heizstabApi['validForMinutes'],
         'timeBoostOverride'     => $heizstabApi['timeBoostOverride'],
         'timeBoostValue'        => $heizstabApi['timeBoostValue'],
         'legionellaBoostBlock'  => $heizstabApi['legionellaBoostBlock'],
     ];
-
     $response = heizstabApiRequest('POST', $heizstabApi['powerEndpoint'], $payload);
-    if ($response === false) {
-        return false;
+    if ($response === false) { 
+        return false; 
     }
 
     $logger->Info('my-PV API power gesetzt: ' . $payload['power'] . 'W fuer ' . $payload['validForMinutes'] . ' Minuten');
@@ -270,7 +260,6 @@ function heizstabApiSetPower(int $power): bool
 function isHeizstabUrl(string $url): bool
 {
     global $urlheizStab;
-
     return str_starts_with($url, rtrim($urlheizStab, '/') . '/');
 }
 
@@ -281,20 +270,13 @@ function isHeizstabUrl(string $url): bool
 function heizstabLogin(): bool
 {
     global $urlheizStab, $heizstabAuth, $heizstabCookieFile, $logger;
-
-    if (empty($heizstabAuth['enabled'])) {
-        return true;
-    }
-
+    if (empty($heizstabAuth['enabled'])) { return true; }
     if ($heizstabAuth['password'] === '') {
         $logger->Error("Heizstab Login aktiv, aber password fehlt");
         return false;
     }
-
     $dir = dirname($heizstabCookieFile);
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0770, true);
-    }
+    if (!is_dir($dir)) { @mkdir($dir, 0770, true); }
 
     $postFields = $heizstabAuth['extraFields'];
     if (!empty($heizstabAuth['usernameField']) && $heizstabAuth['username'] !== null && $heizstabAuth['username'] !== '') {
@@ -338,7 +320,6 @@ function heizstabLogin(): bool
         $logger->Error("Heizstab Login HTTP Fehler [$code] URL: $loginUrl");
         return false;
     }
-
     return true;
 }
 
@@ -670,7 +651,6 @@ function heizen($modus) {
     if ($modus > 0 && $power <= 0) {
         $power = 3000;
     }
-
     $logger->Info("Heizen Modus Heizstab $modus ueber my-PV API power=$power");
     return heizstabApiSetPower($power);
   }
@@ -682,10 +662,10 @@ function heizen($modus) {
     return false;
   } else if ($steuerungseinstellung==2) {           // modbustcp
     if ($modus > 0) {
-      $url1=$urlheizStab.'setup.jsn?bstmode=1';
+//      $url1=$urlheizStab.'setup.jsn?bstmode=1';
       $url2=$urlheizStab.'data.jsn?bststrt=1';
     } else {
-      $url1=$urlheizStab.'setup.jsn?bstmode=0';
+//      $url1=$urlheizStab.'setup.jsn?bstmode=0';
       $url2=$urlheizStab.'data.jsn?bststrt=0';
     }
   } else {
@@ -859,74 +839,27 @@ function getTargetWaterTemp(): float
     return (float)$heizstabApi['targetWaterTemp'];
 }
 
-function decideHeizstabAction(
-    bool $isWithinInterval,
-    bool $isHeating,
-    ?float $currentTemp,
-    float $targetTemp,
-    int $stateBatterie,
-    int &$hysterese,
-    int $hystereseSoll
-): array {
-    if ($stateBatterie > $hystereseSoll) {
-        $hysterese = 0;
-    }
+/* 
+ * entscheidung ob geheizt erden soll
+ */
 
-    if (!$isWithinInterval) {
-        return [
-            'action' => null,
-            'reason' => 'außerhalb Intervall, Regelung pausiert',
-        ];
-    }
-
-    if ($currentTemp === null) {
-        return [
-            'action' => null,
-            'reason' => 'keine gültige Temperatur',
-        ];
-    }
-
+function decideHeizstabAction( bool $isWithinInterval, bool $isHeating, ?float $currentTemp, float $targetTemp, int $stateBatterie, int &$hysterese, int $hystereseSoll ): array {
+    if ($stateBatterie > $hystereseSoll) { $hysterese = 0; }
+    if (!$isWithinInterval) { return [ 'action' => null, 'reason' => 'außerhalb Intervall, Regelung pausiert',]; }
+    if ($currentTemp === null) { return [ 'action' => null, 'reason' => 'keine gültige Temperatur', ]; }
     if ($currentTemp >= $targetTemp) {
-        return [
-            'action' => $isHeating ? 0 : null,
-            'reason' => "Temperatur erreicht ($currentTemp >= $targetTemp)",
-        ];
-    }
-
+        return [ 'action' => $isHeating ? 0 : null, 'reason' => "Temperatur erreicht ($currentTemp >= $targetTemp)",]; }
     if ($stateBatterie < 20) {
         $hysterese = $hystereseSoll;
-        return [
-            'action' => $isHeating ? 0 : null,
-            'reason' => "Akku unter 20% ($stateBatterie%)",
-        ];
+        return [ 'action' => $isHeating ? 0 : null, 'reason' => "Akku unter 20% ($stateBatterie%)",];
     }
-
-    if ($isHeating) {
-        return [
-            'action' => null,
-            'reason' => "heizt weiter, Temperatur zu niedrig ($currentTemp < $targetTemp)",
-        ];
-    }
-
-    if ($stateBatterie > $hystereseSoll) {
-        return [
-            'action' => 1,
-            'reason' => "Temperatur zu niedrig und Akku über $hystereseSoll% ($stateBatterie%)",
-        ];
-    }
-
+    if ($isHeating) { return [ 'action' => null, 'reason' => "heizt weiter, Temperatur zu niedrig ($currentTemp < $targetTemp)", ]; }
+    if ($stateBatterie > $hystereseSoll) { return [ 'action' => 1, 'reason' => "Temperatur zu niedrig und Akku über $hystereseSoll% ($stateBatterie%)", ];}
     if ($hysterese === 0 && $stateBatterie >= 20) {
         $hysterese = $hystereseSoll;
-        return [
-            'action' => 1,
-            'reason' => "Temperatur zu niedrig, Akku zwischen 20% und $hystereseSoll%, Hysterese startet",
-        ];
+        return [ 'action' => 1, 'reason' => "Temperatur zu niedrig, Akku zwischen 20% und $hystereseSoll%, Hysterese startet", ];
     }
-
-    return [
-        'action' => null,
-        'reason' => "Hysterese aktiv, warte auf Akku über $hystereseSoll% ($stateBatterie%)",
-    ];
+    return [ 'action' => null, 'reason' => "Hysterese aktiv, warte auf Akku über $hystereseSoll% ($stateBatterie%)",  ];
 }
 
 function getSleepUntilNextInterval(array $heizIntervalle, int $repeat): array
@@ -1075,21 +1008,11 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   }
   $logger->debugMe("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterie currentWaterTemp ".($currentWaterTemp ?? '??'));
 
-  $decision = decideHeizstabAction(
-      $pruefeHeizen > 0,
-      $isHeating,
-      $currentWaterTemp,
-      (float)$getMinTemp,
-      $stateBatterie,
-      $hysterese,
-      $hystereseSoll
-  );
+  $decision = decideHeizstabAction($pruefeHeizen > 0, $isHeating, $currentWaterTemp, (float)$getMinTemp, $stateBatterie, $hysterese, $hystereseSoll );   // hysterwsew auch Rückgbeparameter
 
   if ($decision['action'] === 1) {
     $logger->Info("heizstab einschalten: ".$decision['reason']." SOC=$stateBatterie hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
-    if (heizen(1)) {
-      $heizstabDurchRegelungAktiv=true;
-    }
+    if (heizen(1)) { $heizstabDurchRegelungAktiv=true; }
   } elseif ($decision['action'] === 0) {
     $logger->Info("heizstab ausschalten: ".$decision['reason']." SOC=$stateBatterie hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
     if (heizen(0)) {
@@ -1099,8 +1022,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
     $logger->debugMe("heizstab unverändert: ".$decision['reason']." SOC=$stateBatterie hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
   }
 
-  if ($pruefeHeizen>0 ) {
-    $sleepTime=$repeat*60;  
+  if ($pruefeHeizen>0 ) { $sleepTime=$repeat*60;  
   } else { // Ende Untersuchung Heizen
     $logger->debugMe("currentTime $currentTime Außerhalb Intervall ");
     if ($isHeating && $heizstabDurchRegelungAktiv) {

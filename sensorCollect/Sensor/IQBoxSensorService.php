@@ -157,7 +157,7 @@ class IQBoxSensorService implements SensorFetcherInterface
                 $outputMode=$sensor['outputMode'];
                 $sensorID=$sensor['sensorID'];
 
-                //$this->logger->debugMe("name: $sensorLokalId value $value einheit $einheit ");
+                $this->logger->debugMe("name: $sensorLokalId value $value einheit $einheit ");
                 $rrArr = [];
                 if (isset($this->items[$sensorLokalId])) {
                     $rrArr = $this->IQStatreal($this->items[$sensorLokalId],$sensorLokalId, $sensorID, $outputMode);
@@ -201,11 +201,22 @@ class IQBoxSensorService implements SensorFetcherInterface
         if (isset($data['items'])) { $data = $data['items']; }
         $items = [];
         foreach ($data as $item) {
-            if (!is_array($item)) continue;
+            if (!is_array($item)) {
+        $this->logger->debugMe("getDataFromDevice : no array $item");
+              continue;
+            }
             $name  = $item['name']  ?? null;
             $state = $item['state'] ?? null;
-            if (!$name) continue;
-            $items[$name] = ($state === null || $state === 'NULL' || $state === 'UNDEF') ? null : $state;
+        $this->logger->debugMe("getDataFromDevice : name $name state $state");
+            if (!$name) { 
+        $this->logger->debugMe("getDataFromDevice : no name");
+                continue;
+            }
+            $items[$name] = ($state === null || $state === 'NULL' || $state === 'UNDEF') ? '' : $state;
+            $this->logger->debugMe("getDataFromDevice : set $name state ".$items[$name]);
+            if (($state === null || $state === 'NULL' || $state === 'UNDEF') ) {
+                $this->logger->debugMe("getDataFromDevice : set $name state ".$items[$name]." state leer erkannt ");            
+            }
         }
         $this->logger->debugMe("getDataFromDevice OK: " . count($items));
         return $items;
