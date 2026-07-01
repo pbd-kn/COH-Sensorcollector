@@ -202,20 +202,19 @@ class IQBoxSensorService implements SensorFetcherInterface
         $items = [];
         foreach ($data as $item) {
             if (!is_array($item)) {
-        $this->logger->debugMe("getDataFromDevice : no array $item");
-              continue;
+                $this->logger->debugMe("getDataFromDevice : no array $item");
+                continue;
             }
             $name  = $item['name']  ?? null;
             $state = $item['state'] ?? null;
-        $this->logger->debugMe("getDataFromDevice : name $name state $state");
             if (!$name) { 
-        $this->logger->debugMe("getDataFromDevice : no name");
+                $this->logger->debugMe("getDataFromDevice : no name");
                 continue;
             }
             $items[$name] = ($state === null || $state === 'NULL' || $state === 'UNDEF') ? '' : $state;
             $this->logger->debugMe("getDataFromDevice : set $name state ".$items[$name]);
             if (($state === null || $state === 'NULL' || $state === 'UNDEF') ) {
-                $this->logger->debugMe("getDataFromDevice : set $name state ".$items[$name]." state leer erkannt ");            
+                $this->logger->debugMe("!! IQ item $name raw Wert state=" . var_export($state, true));            
             }
         }
         $this->logger->debugMe("getDataFromDevice OK: " . count($items));

@@ -253,7 +253,7 @@ class HeizstabSensorService implements SensorFetcherInterface
 
     private function getDataFromCloudApi(string $serial, string $apiKey)
     {
-        $this->logger->debugMe('Heizstab Sensorservice getDataFromCloudApi serial $serial apiKey $apiKey' . count($sensors));    
+        $this->logger->debugMe("Heizstab Sensorservice getDataFromCloudApi serial $serial apiKey $apiKey");    
         $v1 = $this->cloudApiGetJson($serial, $apiKey, 'data');
         $v2 = $this->cloudApiGetJson($serial, $apiKey, 'setup');
         if ($v1 === null || $v2 === null) {

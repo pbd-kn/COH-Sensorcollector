@@ -14,8 +14,7 @@ $logf="/home/peter/coh/logs/heizstabserver.log";
 $logger = new Logger();
 $logger->setLogfile ($logf);
 $logger->setDebug($debug);
-$logger->Info("json-heizung nicht parallel zu regelung über IQbox");
-exit;                           // abbruch, da json-hizung.php und iqbox steuerung des Heizstabe kritisch ist
+$logger->Info("json-heizung startet mit Sicherstellung/Boost ohne ctrl/setup Umschaltung");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $urlIQbox    = 'http://192.168.178.26';
@@ -49,6 +48,12 @@ $heizstabApi = [
     'timeBoostOverride'       => 0,
     'timeBoostValue'          => 0,
     'legionellaBoostBlock'    => 1,
+];
+$heizstabControl = [
+    'enabled'      => true,
+    'mode'         => 'boost-local',
+    'boostOnPath'  => 'data.jsn?bststrt=1',
+    'boostOffPath' => 'data.jsn?bststrt=0',
 ];
 $logger->Info("Restart json-heizung Logfile $logf paramsFile $paramsFile");
 
@@ -151,6 +156,21 @@ function configureHeizstabApi(array $params): void
     $heizstabApi['legionellaBoostBlock'] = (int)($cfg['legionellaBoostBlock'] ?? $heizstabApi['legionellaBoostBlock']);
 }
 
+function configureHeizstabControl(array $params): void
+{
+    global $heizstabControl;
+
+    if (!isset($params['heizstabControl']) || !is_array($params['heizstabControl'])) {
+        return;
+    }
+
+    $cfg = $params['heizstabControl'];
+    $heizstabControl['enabled']      = !empty($cfg['enabled']);
+    $heizstabControl['mode']         = (string)($cfg['mode'] ?? $heizstabControl['mode']);
+    $heizstabControl['boostOnPath']  = ltrim((string)($cfg['boostOnPath'] ?? $heizstabControl['boostOnPath']), '/');
+    $heizstabControl['boostOffPath'] = ltrim((string)($cfg['boostOffPath'] ?? $heizstabControl['boostOffPath']), '/');
+}
+
 function isHeizstabApiEnabled(): bool
 {
     global $heizstabApi, $logger;
@@ -174,6 +194,13 @@ function buildHeizstabApiUrl(string $endpoint): string
     global $heizstabApi;
 
     return rtrim($heizstabApi['baseUrl'], '/') . '/device/' . rawurlencode($heizstabApi['serial']) . '/' . ltrim($endpoint, '/');
+}
+
+function buildHeizstabLocalUrl(string $path): string
+{
+    global $urlheizStab;
+
+    return rtrim($urlheizStab, '/') . '/' . ltrim($path, '/');
 }
 
 function heizstabApiRequest(string $method, string $endpoint, ?array $payload = null)
@@ -238,22 +265,30 @@ function heizstabApiGetJson(string $endpoint)
     return $data;
 }
 
-function heizstabApiSetPower(int $power): bool
+function heizstabBoostSicherstellung(bool $enable): bool
 {
-    global $heizstabApi, $logger;
-    $payload = [                // pst-Parameter zum setzen von Power
-        'power'                 => max(0, $power),
-        'validForMinutes'       => $heizstabApi['validForMinutes'],
-        'timeBoostOverride'     => $heizstabApi['timeBoostOverride'],
-        'timeBoostValue'        => $heizstabApi['timeBoostValue'],
-        'legionellaBoostBlock'  => $heizstabApi['legionellaBoostBlock'],
-    ];
-    $response = heizstabApiRequest('POST', $heizstabApi['powerEndpoint'], $payload);
-    if ($response === false) { 
-        return false; 
+    global $heizstabControl, $logger;
+
+    if (empty($heizstabControl['enabled'])) {
+        $logger->Info('Heizstab-Steuerung deaktiviert, Sicherstellung wird nicht geschaltet');
+        return false;
     }
 
-    $logger->Info('my-PV API power gesetzt: ' . $payload['power'] . 'W fuer ' . $payload['validForMinutes'] . ' Minuten');
+    if ($heizstabControl['mode'] !== 'boost-local') {
+        $logger->Error('Unbekannter Heizstab-Steuermodus: ' . $heizstabControl['mode']);
+        return false;
+    }
+
+    $path = $enable ? $heizstabControl['boostOnPath'] : $heizstabControl['boostOffPath'];
+    $url = buildHeizstabLocalUrl($path);
+    $logger->Info('Heizstab Sicherstellung ' . ($enable ? 'starten' : 'stoppen') . " URL: $url");
+
+    $response = curlRequest($url);
+    if ($response === false) {
+        $logger->Error('Heizstab Sicherstellung konnte nicht geschaltet werden');
+        return false;
+    }
+
     return true;
 }
 
@@ -642,49 +677,10 @@ function timeToMinutes(string $time): int
  *      modtcp /setup.jsn?ctrl=2&tout=60      messintervall  ctrl 2 = modbus tcp
  */      
 function heizen($modus) {
-  // steuerungseinstellung bestimmen wie
-  // aktuell wird der Boost für Warmwassereinstellung verwendet
-  //setup.jsn?bstmode=0
-  global $urlheizStab,$ctrl,$logger,$heizstabApi;
-  if (isHeizstabApiEnabled()) {
-    $power = $modus > 0 ? (int)$heizstabApi['powerOn'] : 0;
-    if ($modus > 0 && $power <= 0) {
-        $power = 3000;
-    }
-    $logger->Info("Heizen Modus Heizstab $modus ueber my-PV API power=$power");
-    return heizstabApiSetPower($power);
-  }
+  global $logger;
 
-  $steuerungseinstellung=$ctrl;    
-  $url1 = $url2 = "";
-  if ($steuerungseinstellung==1) {           // 1 http 2 ModbusTCP
-    $logger->Info("Heizen Modus Heizstab $modus Protokoll $steuerungseinstellung bei http nichts tun");
-    return false;
-  } else if ($steuerungseinstellung==2) {           // modbustcp
-    if ($modus > 0) {
-//      $url1=$urlheizStab.'setup.jsn?bstmode=1';
-      $url2=$urlheizStab.'data.jsn?bststrt=1';
-    } else {
-//      $url1=$urlheizStab.'setup.jsn?bstmode=0';
-      $url2=$urlheizStab.'data.jsn?bststrt=0';
-    }
-  } else {
-    $logger->Error("Heizen Fehler Modus Heizstab ctrl $steuerungseinstellung ");
-    return false;
-  }
-  $logger->Info("Heizen Modus Heizstab $modus ");
-  $logger->debugMe("Heizen Modus Heizstab ctrl $steuerungseinstellung url1: $url1 url2: $url2");
-  //$response=@file_get_contents($urlheizStab.'data.jsn?bststrt=1');
-  if ($url1 && $url2) {
-        $response1 = curlRequest($url1);
-        sleep(1); // Warte 1 sec
-        $response2 = curlRequest($url2);
-        if ($response1 === false || $response2 === false) {
-            $logger->Error("!!! Fehler beim Heizen-Steuerungsbefehl: $modus");
-            return false;
-        }
-  }
-  return true;
+  $logger->Info("Heizen Modus Heizstab $modus ueber Sicherstellung/Boost");
+  return heizstabBoostSicherstellung($modus > 0);
 }
 
 // funktionen zur normierung des Status
@@ -944,6 +940,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
         }                
         configureHeizstabAuth($params);
         configureHeizstabApi($params);
+        configureHeizstabControl($params);
 
         if (isset($params['repeat'])) {
             //writeLog("repeat  alle " . $params['repeat'] . "Min");

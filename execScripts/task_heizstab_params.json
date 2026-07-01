@@ -41,6 +41,12 @@
     "timeBoostValue": 0,
     "legionellaBoostBlock": 1
   },
+  "heizstabControl": {
+    "enabled": true,
+    "mode": "boost-local",
+    "boostOnPath": "data.jsn?bststrt=1",
+    "boostOffPath": "data.jsn?bststrt=0"
+  },
   "urlIQbox": "192.168.178.26",
   "debug": "1"
 }

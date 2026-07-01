@@ -718,6 +718,9 @@ function decodeWifiStatus($wfs)
             cursor: pointer;
             margin-left: 8px;
         }
+        .edit-control {
+            cursor: pointer;
+        }
         /* BADGES  klasse wird bals returnwertz bei decode eingestellt */
         .badge-ok { color: #178a2f; font-weight: bold; }
         .badge-warn { color: #c97a00; font-weight: bold; }
@@ -858,30 +861,30 @@ function decodeWifiStatus($wfs)
             <summary>Leckageschutz</summary>
             <div class="row">
                 <span>Volumenleckage</span>
-                <span>
+                <span class="edit-control" onclick="openEdit('pv', <?= (int)$pv ?>)">
                     <?= htmlspecialchars((string)$pv) ?> L
-                    <span class="edit-btn" onclick="openEdit('pv', <?= (int)$pv ?>)">✏️</span>
+                    <span class="edit-btn">✏️</span>
                 </span>
             </div>
             <div class="row">
                 <span>Zeitleckage Zeit in der das Volumenleckage überprüft wird</span>
-                <span>
+                <span class="edit-control" onclick="openEdit('pt', <?= (int)$pt ?>)">
                     <?= htmlspecialchars((string)$pt) ?> min
-                    <span class="edit-btn" onclick="openEdit('pt', <?= (int)$pt ?>)">✏️</span>
+                    <span class="edit-btn">✏️</span>
                 </span>
             </div>
             <div class="row">
                 <span>Durchflussleckage</span>
-                <span>
+                <span class="edit-control" onclick="openEdit('pf', <?= (int)$pf ?>)">
                     <?= htmlspecialchars((string)$pf) ?> l/h
-                    <span class="edit-btn" onclick="openEdit('pf', <?= (int)$pf ?>)">✏️</span>
+                    <span class="edit-btn">✏️</span>
                 </span>
             </div>
             <div class="row">
                 <span>Mikroleckage</span>
-                <span>
+                <span class="edit-control" onclick="openEdit('pm', <?= $pm ? 1 : 0 ?>)">
                     <?= $pm ? "An" : "Aus" ?>
-                    <span class="edit-btn" onclick="openEdit('pm', <?= $pm ? 1 : 0 ?>)">✏️</span>
+                    <span class="edit-btn">✏️</span>
                 </span>
             </div>
         </details>
@@ -895,7 +898,7 @@ function decodeWifiStatus($wfs)
             </div>
             <div class="row">
                 <span>(DRP) Intervall</span>
-                <span>
+                <span class="edit-control" onclick="openEdit('drp', '<?= (int)($data["DRP"] ?? 1) ?>')">
                     <?php
                     $drpText = match ((int)($data["DRP"] ?? 0)) {
                         1 => "Täglich",
@@ -905,17 +908,17 @@ function decodeWifiStatus($wfs)
                     };
                     echo htmlspecialchars($drpText);
                     ?>
-                    <span class="edit-btn" onclick="openEdit('drp', '<?= (int)($data["DRP"] ?? 1) ?>')">✏️</span>
+                    <span class="edit-btn">✏️</span>
                 </span>
             </div>
             <div class="row">
                 <span>(DTT) Uhrzeit</span>
-                <span>
+                <span class="edit-control" onclick="openEdit('dtt', '<?= htmlspecialchars((string)($data["DTT"] ?? '04:00'), ENT_QUOTES) ?>')">
                     <?= htmlspecialchars((string)($data["DTT"] ?? '-')) ?>
-                    <span class="edit-btn" onclick="openEdit('dtt', '<?= htmlspecialchars((string)($data["DTT"] ?? '04:00'), ENT_QUOTES) ?>')">✏️</span>
+                    <span class="edit-btn">✏️</span>
                 </span>
             </div>
-            <div class="row"><span>(DEX) Mikro-Test</span><span>Starten<span class="edit-btn" onclick="openEdit('dex', '1')">▶️</span></span></div>
+            <div class="row"><span>(DEX) Mikro-Test</span><span class="edit-control" onclick="openEdit('dex', '1')">Starten<span class="edit-btn">▶️</span></span></div>
         </details>
         <!-- MIKROLECKAGE Diagnosewerte -->
         <details>
@@ -1023,6 +1026,8 @@ function decodeWifiStatus($wfs)
     <div id="editBox"></div>
 
     <script>
+        const activeProfile = <?= (int)$aktprf ?>;
+
         function handleAction(el, text) {
             if (!confirm(text)) return false;
 
@@ -1035,6 +1040,78 @@ function decodeWifiStatus($wfs)
             if (note) note.innerText = '⏳ Bitte warten...';
 
             return true;
+        }
+
+        function openEdit(type, currentValue) {
+            const box = document.getElementById('editBox');
+            if (!box) return;
+
+            const labels = {
+                pv: 'Volumenleckage',
+                pt: 'Zeitleckage',
+                pf: 'Durchflussleckage',
+                pm: 'Mikroleckage',
+                drp: 'Intervall',
+                dtt: 'Uhrzeit',
+                dex: 'Mikro-Test'
+            };
+
+            const typeLabel = labels[type] || type.toUpperCase();
+            let field = `<input name="value" value="${escapeHtml(currentValue)}">`;
+
+            if (type === 'pm') {
+                field = `
+                    <select name="value">
+                        <option value="1" ${Number(currentValue) === 1 ? 'selected' : ''}>An</option>
+                        <option value="0" ${Number(currentValue) === 0 ? 'selected' : ''}>Aus</option>
+                    </select>
+                `;
+            }
+
+            if (type === 'drp') {
+                field = `
+                    <select name="value">
+                        <option value="1" ${Number(currentValue) === 1 ? 'selected' : ''}>T&auml;glich</option>
+                        <option value="2" ${Number(currentValue) === 2 ? 'selected' : ''}>W&ouml;chentlich</option>
+                        <option value="3" ${Number(currentValue) === 3 ? 'selected' : ''}>Monatlich</option>
+                    </select>
+                `;
+            }
+
+            if (type === 'dtt') {
+                field = `<input type="time" name="value" value="${escapeHtml(currentValue || '04:00')}">`;
+            }
+
+            if (type === 'dex') {
+                field = '<input type="hidden" name="value" value="1"><p>Mikroleckage-Test jetzt starten?</p>';
+            }
+
+            box.innerHTML = `
+                <form method="post">
+                    <h3>${typeLabel}</h3>
+                    <input type="hidden" name="setType" value="${escapeHtml(type)}">
+                    <input type="hidden" name="profile" value="${activeProfile}">
+                    ${field}
+                    <button type="submit">${type === 'dex' ? 'Starten' : 'Speichern'}</button>
+                    <button type="button" onclick="closeEdit()">Abbrechen</button>
+                </form>
+            `;
+            box.style.display = 'block';
+        }
+
+        function closeEdit() {
+            const box = document.getElementById('editBox');
+            if (box) box.style.display = 'none';
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[char]));
         }
     </script>
 

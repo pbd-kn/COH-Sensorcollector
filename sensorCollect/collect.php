@@ -72,16 +72,7 @@ function getHistoryFlag(mysql_dialog  $db, string $sensorID): int
  * Update der jüngsten Zeile für sensorID (history=0-Fall).
  * Legt eine Zeile an, wenn es noch keine gibt.
  */
-function upsertCurrentValue(
-    mysql_dialog $db,
-    string $sensorID,
-    int $tstamp,
-    string $sensorValue,
-    string $einheit,
-    string $type,
-    string $source,
-    Logger $logger
-): void {
+function upsertCurrentValue( mysql_dialog $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit,string $type, string $source, Logger $logger ): void {
     $db->begin_transaction();
 
     try {
@@ -124,7 +115,6 @@ function upsertCurrentValue(
         // UPDATE (IMMER ALLES SETZEN!)
         // ---------------------------------------------------
         if ($hasRow) {
-
             $upd = "UPDATE tl_coh_sensorvalue
                        SET tstamp = ?,
                            sensorValue = ?,
@@ -208,16 +198,7 @@ function upsertCurrentValue(
  * Historie-Fall: wenn der letzte Wert gleich ist -> nur tstamp aktualisieren,
  * sonst neuen Datensatz anlegen.
  */
-function insertOrTouchHistory(
-    mysql_dialog $db,
-    string $sensorID,
-    int $tstamp,
-    string $sensorValue,
-    string $einheit,
-    string $type,
-    string $source,
-    Logger $logger
-): void {
+function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void {
     $db->begin_transaction();
 
     try {
@@ -253,7 +234,7 @@ function insertOrTouchHistory(
 
         if ($curVal === '') {
             //$logger->debugMe("Skip history insert: empty value for sensorID=$sensorID");
-            $logger->Info("Skip insert: empty value for sensorID=$sensorID Alter Wert $lastVal $lastEinheit bleibt bestehen");
+            $logger->Info("Skip insert: empty value ('null' || 'NULL' || 'UNDEF') for sensorID=$sensorID Alter Wert $lastVal $lastEinheit bleibt bestehen");
             $db->commit();
             return;
         }
