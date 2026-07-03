@@ -5,6 +5,8 @@ declare(strict_types=1);
  * Interaktiver Leser fuer den my-PV/ELWA Heizstab.
  * Leere Eingabe zeigt alle Werte aus data.jsn und setup.jsn.
  * "raw" schreibt data.jsn und setup.jsn als komplette JSON-Dateien.
+ * Eingaben mit "/" rufen einen Heizstab-Pfad direkt auf, z.B. /data.jsn?bststrt=0.
+ * "mode local" und "mode api" wechseln zwischen lokalem Heizstab und offizieller my-PV API.
  * "q" beendet, "r" laedt neu, "%" funktioniert wie SQL LIKE.
  *
  * Beispiele:
@@ -36,18 +38,29 @@ $insecureTls = filterBool($options['insecure'] ?? ($authConfig['insecureTls'] ??
 $authEnabled = filterBool($options['auth'] ?? ($authConfig['enabled'] ?? true));
 $cookieDir = (string)($options['cookie-dir'] ?? ($authConfig['cookieDir'] ?? sys_get_temp_dir()));
 $cookieFile = (string)($options['cookie'] ?? ($authConfig['cookieFile'] ?? buildDefaultCookieFile($baseUrl, $cookieDir)));
+$mode = strtolower((string)($options['mode'] ?? ($params['heizstabRestMode'] ?? 'local')));
+$apiConfig = is_array($params['heizstabApi'] ?? null) ? $params['heizstabApi'] : [];
+$apiBaseUrl = normalizeBaseUrl((string)($options['api-url'] ?? ($apiConfig['baseUrl'] ?? 'https://api.my-pv.com/api/v1')));
+$apiSerial = (string)($options['api-serial'] ?? ($apiConfig['serial'] ?? ''));
+$apiTokenEnv = (string)($apiConfig['apiTokenEnv'] ?? 'MYPV_API_TOKEN');
+$apiToken = (string)($options['api-token'] ?? ($apiConfig['apiToken'] ?? (getenv($apiTokenEnv) ?: '')));
+$apiInsecureTls = filterBool($options['api-insecure'] ?? ($apiConfig['insecureTls'] ?? false));
 
 try {
     echo "Heizstab REST: $baseUrl" . PHP_EOL;
+    echo "Modus:         $mode" . PHP_EOL;
     echo "Params:        " . (is_file($paramsFile) ? $paramsFile : 'nicht gefunden') . PHP_EOL;
     echo "Login URL:     " . buildUrl($baseUrl, $loginPath) . PHP_EOL;
     echo "Login aktiv:   " . ($authEnabled ? 'ja' : 'nein') . PHP_EOL;
     echo "Cookie:        $cookieFile" . PHP_EOL;
     echo "TLS check:     " . ($insecureTls ? 'aus' : 'an') . PHP_EOL;
-    echo PHP_EOL . 'Lade data.jsn und setup.jsn ...' . PHP_EOL;
+    echo "API URL:       $apiBaseUrl" . PHP_EOL;
+    echo "API Serial:    $apiSerial" . PHP_EOL;
+    echo "API Token:     " . ($apiToken !== '' ? 'gesetzt' : 'fehlt') . PHP_EOL;
+    echo PHP_EOL . ($mode === 'api' ? 'Lade API-Daten ...' : 'Lade data.jsn und setup.jsn ...') . PHP_EOL;
 
     $rawData = [];
-    $items = loadHeizstabItems($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
+    $items = safeLoadItemsForMode($mode, $baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
     echo 'Werte geladen: ' . count($items) . PHP_EOL;
     printHelp();
 
@@ -70,8 +83,24 @@ try {
         }
 
         if (in_array(strtolower($filter), ['r', 'reload'], true)) {
-            $items = loadHeizstabItems($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
+            $items = safeLoadItemsForMode($mode, $baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
             echo 'Werte neu geladen: ' . count($items) . PHP_EOL;
+            continue;
+        }
+
+        if (preg_match('/^mode\s+(local|api)$/i', $filter, $matches)) {
+            $mode = strtolower($matches[1]);
+            echo "Modus gewechselt: $mode" . PHP_EOL;
+            resetSessionForMode($mode, $cookieFile);
+            $items = safeLoadItemsForMode($mode, $baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
+            echo 'Werte geladen: ' . count($items) . PHP_EOL;
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['login', 'relogin'], true)) {
+            resetSessionForMode($mode, $cookieFile);
+            $items = safeLoadItemsForMode($mode, $baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
+            echo 'Werte geladen: ' . count($items) . PHP_EOL;
             continue;
         }
 
@@ -79,6 +108,61 @@ try {
             $files = writeRawJsonFiles($rawData);
             foreach ($files as $source => $file) {
                 echo "Raw JSON gespeichert ($source): $file" . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (preg_match('/^post\s+(.+)$/i', $filter, $matches)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: post ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabPost($baseUrl, trim($matches[1]), $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['booston', 'boost'], true)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: boost ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabPost($baseUrl, 'bststrt=1', $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['boostoff'], true)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: boostoff ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabPost($baseUrl, 'bststrt=0', $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (str_starts_with($filter, '/')) {
+            try {
+                if ($mode === 'api') {
+                    executeApiPath($filter);
+                } else {
+                    executeHeizstabPath($baseUrl, $filter, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+                }
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
             }
             continue;
         }
@@ -114,6 +198,158 @@ function loadHeizstabItems(
         flattenJson($data, 'data.jsn'),
         flattenJson($setup, 'setup.jsn')
     );
+}
+
+function loadItemsForMode(
+    string $mode,
+    string &$baseUrl,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields,
+    array &$rawData
+): array {
+    if ($mode === 'api') {
+        return loadApiItems($rawData);
+    }
+
+    return loadHeizstabItems($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
+}
+
+function safeLoadItemsForMode(
+    string $mode,
+    string &$baseUrl,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields,
+    array &$rawData
+): array {
+    try {
+        return loadItemsForMode($mode, $baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, $rawData);
+    } catch (Throwable $e) {
+        echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+
+        $rawData = [];
+        return [];
+    }
+}
+
+function resetSessionForMode(string $mode, string $cookieFile): void
+{
+    if ($mode === 'local') {
+        if (is_file($cookieFile)) {
+            @unlink($cookieFile);
+        }
+
+        echo 'Lokale Heizstab-Session geloescht, der naechste Zugriff macht einen neuen Login.' . PHP_EOL;
+        return;
+    }
+
+    if ($mode === 'api') {
+        echo 'API-Modus verwendet den my-PV API-Token aus der Parameterdatei, kein Browser-Login noetig.' . PHP_EOL;
+        return;
+    }
+}
+
+function loadApiItems(array &$rawData): array
+{
+    $data = apiRequest('GET', 'data');
+    $setup = apiRequest('GET', 'setup');
+    $rawData = [
+        'api.data' => $data,
+        'api.setup' => $setup,
+    ];
+
+    return array_merge(
+        flattenJson($data, 'api.data'),
+        flattenJson($setup, 'api.setup')
+    );
+}
+
+function executeApiPath(string $path): void
+{
+    $endpoint = ltrim($path, '/');
+    $result = apiRequest('GET', $endpoint);
+
+    echo 'GET ' . buildApiUrl($endpoint) . PHP_EOL;
+    foreach (flattenJson($result, 'api.' . $endpoint) as $item) {
+        echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
+    }
+}
+
+function apiRequest(string $method, string $endpoint, ?array $payload = null): array
+{
+    global $apiBaseUrl, $apiSerial, $apiToken, $apiInsecureTls;
+
+    if ($apiSerial === '') {
+        throw new InvalidArgumentException('API serial fehlt');
+    }
+
+    if ($apiToken === '') {
+        throw new InvalidArgumentException('API token fehlt');
+    }
+
+    $url = buildApiUrl($endpoint);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $apiToken,
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+    ]);
+
+    if ($apiInsecureTls) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
+
+    if ($method !== 'GET') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload ?? [], JSON_UNESCAPED_SLASHES));
+    }
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $error = curl_error($ch);
+        curl_close($ch);
+        throw new RuntimeException("API Request fehlgeschlagen fuer $url: $error");
+    }
+
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code < 200 || $code >= 300) {
+        throw new RuntimeException("API HTTP Fehler $code fuer $url Antwort: " . trim((string)$response));
+    }
+
+    $decoded = json_decode((string)$response, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new RuntimeException("API Antwort ist kein JSON fuer $url: " . json_last_error_msg() . ' Antwort: ' . trim((string)$response));
+    }
+
+    return is_array($decoded) ? $decoded : ['value' => $decoded];
+}
+
+function buildApiUrl(string $endpoint): string
+{
+    global $apiBaseUrl, $apiSerial;
+
+    return rtrim($apiBaseUrl, '/') . '/device/' . rawurlencode($apiSerial) . '/' . ltrim($endpoint, '/');
 }
 
 function fetchJsonWithRelogin(
@@ -168,6 +404,165 @@ function fetchJsonWithRelogin(
     }
 
     return $decoded;
+}
+
+function executeHeizstabPath(
+    string &$baseUrl,
+    string $path,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields
+): void {
+    $result = fetchRawWithRelogin($baseUrl, $path, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+
+    echo 'GET ' . buildUrl($baseUrl, $path) . PHP_EOL;
+    echo 'HTTP ' . $result['http_code'] . PHP_EOL;
+
+    $body = trim($result['body']);
+    $decoded = json_decode($body, true);
+    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        foreach (flattenJson($decoded, ltrim($path, '/')) as $item) {
+            echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
+        }
+        return;
+    }
+
+    echo $body . PHP_EOL;
+}
+
+function executeHeizstabPost(
+    string &$baseUrl,
+    string $body,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields
+): void {
+    $result = postSetupWithRelogin($baseUrl, $body, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+
+    echo 'POST ' . buildUrl($baseUrl, '/setup.jsn') . PHP_EOL;
+    echo 'Body: ' . $body . PHP_EOL;
+    echo 'HTTP ' . $result['http_code'] . PHP_EOL;
+
+    $responseBody = trim($result['body']);
+    $decoded = json_decode($responseBody, true);
+    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        foreach (flattenJson($decoded, 'setup.jsn POST') as $item) {
+            echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
+        }
+        return;
+    }
+
+    echo $responseBody . PHP_EOL;
+}
+
+function fetchRawWithRelogin(
+    string &$baseUrl,
+    string $path,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields
+): array {
+    if ($authEnabled) {
+        ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
+    }
+
+    $result = curlGet(buildUrl($baseUrl, $path), $cookieFile, $insecureTls, $authEnabled);
+
+    if (shouldSwitchToHttps($baseUrl, $result['http_code'], $result['body'])) {
+        $baseUrl = switchBaseUrlToHttps($baseUrl);
+        echo "$path HTTP->HTTPS Redirect erkannt, neuer Base URL: $baseUrl" . PHP_EOL;
+        @unlink($cookieFile);
+
+        if ($authEnabled) {
+            ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
+        }
+
+        $result = curlGet(buildUrl($baseUrl, $path), $cookieFile, $insecureTls, $authEnabled);
+    }
+
+    if ($authEnabled && in_array($result['http_code'], [301, 302, 303, 401, 403], true)) {
+        echo "$path Session abgelaufen oder Login erforderlich (HTTP {$result['http_code']}). Re-Login ..." . PHP_EOL;
+        @unlink($cookieFile);
+        elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
+        $result = curlGet(buildUrl($baseUrl, $path), $cookieFile, $insecureTls, $authEnabled);
+    }
+
+    return $result;
+}
+
+function postSetupWithRelogin(
+    string &$baseUrl,
+    string $body,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields
+): array {
+    if ($authEnabled) {
+        ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
+    }
+
+    $postBody = appendPasswordField($body, $passwordField, $password, $authEnabled);
+    $result = curlPostForm(buildUrl($baseUrl, '/setup.jsn'), $postBody, $cookieFile, $insecureTls, $authEnabled);
+
+    if (shouldSwitchToHttps($baseUrl, $result['http_code'], $result['body'])) {
+        $baseUrl = switchBaseUrlToHttps($baseUrl);
+        echo "/setup.jsn HTTP->HTTPS Redirect erkannt, neuer Base URL: $baseUrl" . PHP_EOL;
+        @unlink($cookieFile);
+
+        if ($authEnabled) {
+            ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
+        }
+
+        $postBody = appendPasswordField($body, $passwordField, $password, $authEnabled);
+        $result = curlPostForm(buildUrl($baseUrl, '/setup.jsn'), $postBody, $cookieFile, $insecureTls, $authEnabled);
+    }
+
+    if ($authEnabled && in_array($result['http_code'], [301, 302, 303, 401, 403], true)) {
+        echo "/setup.jsn Session abgelaufen oder Login erforderlich (HTTP {$result['http_code']}). Re-Login ..." . PHP_EOL;
+        @unlink($cookieFile);
+        elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
+        $postBody = appendPasswordField($body, $passwordField, $password, $authEnabled);
+        $result = curlPostForm(buildUrl($baseUrl, '/setup.jsn'), $postBody, $cookieFile, $insecureTls, $authEnabled);
+    }
+
+    if ($result['http_code'] < 200 || $result['http_code'] >= 300) {
+        throw new RuntimeException("POST HTTP Fehler {$result['http_code']} fuer " . buildUrl($baseUrl, '/setup.jsn') . ' Antwort: ' . trim($result['body']));
+    }
+
+    return $result;
+}
+
+function appendPasswordField(string $body, string $passwordField, string $password, bool $authEnabled): string
+{
+    if (!$authEnabled || $password === '' || preg_match('/(?:^|&)' . preg_quote($passwordField, '/') . '=/', $body)) {
+        return $body;
+    }
+
+    return $body . ($body === '' ? '' : '&') . rawurlencode($passwordField) . '=' . rawurlencode($password);
 }
 
 function ensureElwaLogin(
@@ -304,6 +699,53 @@ function curlGet(string $url, string $cookieFile, bool &$insecureTls, bool $auth
     ];
 }
 
+function curlPostForm(string $url, string $body, string $cookieFile, bool &$insecureTls, bool $authEnabled): array
+{
+    $ch = curl_init($url);
+    $options = [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json',
+        ],
+    ];
+
+    if ($authEnabled) {
+        $options[CURLOPT_COOKIEFILE] = $cookieFile;
+        $options[CURLOPT_COOKIEJAR] = $cookieFile;
+    }
+
+    curl_setopt_array($ch, $options);
+    applyTlsOptions($ch, $insecureTls);
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if (!$insecureTls && isSelfSignedCertificateError($error)) {
+            $insecureTls = true;
+            echo "Selbstsigniertes Zertifikat erkannt, TLS-Pruefung wird deaktiviert." . PHP_EOL;
+            return curlPostForm($url, $body, $cookieFile, $insecureTls, $authEnabled);
+        }
+
+        throw new RuntimeException("POST fehlgeschlagen fuer $url: $error");
+    }
+
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return [
+        'http_code' => (int)$code,
+        'body' => (string)$response,
+    ];
+}
+
 function flattenJson(array $data, string $source, string $prefix = ''): array
 {
     $rows = [];
@@ -335,6 +777,15 @@ function printHelp(): void
     echo '  leer          alle Werte anzeigen' . PHP_EOL;
     echo '  text          Suche in Quelle, Key, Pfad, Wert oder Typ' . PHP_EOL;
     echo '  %text%        LIKE-Suche mit % als Platzhalter, z.B. %temp%' . PHP_EOL;
+    echo '  mode local    lokale Heizstab-REST-Schnittstelle verwenden' . PHP_EOL;
+    echo '  mode api      offizielle my-PV API wie checkheizstabdata.php verwenden' . PHP_EOL;
+    echo '  login         Session des aktuellen Modus loeschen und neu laden' . PHP_EOL;
+    echo '  boost         lokalen Sicherstellungs-Boost starten (POST setup.jsn bststrt=1)' . PHP_EOL;
+    echo '  boostoff      lokalen Sicherstellungs-Boost stoppen (POST setup.jsn bststrt=0)' . PHP_EOL;
+    echo '  post a=b      lokalen POST auf setup.jsn ausfuehren, z.B. post bststrt=1' . PHP_EOL;
+    echo '  /data.jsn?bststrt=0  direkten Heizstab-Pfad ausfuehren' . PHP_EOL;
+    echo '  /data         im API-Modus API-Endpunkt data ausfuehren' . PHP_EOL;
+    echo '  /setup.jsn            direkten Heizstab-Pfad ausfuehren' . PHP_EOL;
     echo '  r             data.jsn und setup.jsn neu laden' . PHP_EOL;
     echo '  raw           data.jsn und setup.jsn komplett als JSON-Dateien speichern' . PHP_EOL;
     echo '  ?             diese Hilfe anzeigen' . PHP_EOL;

@@ -52,8 +52,8 @@ $heizstabApi = [
 $heizstabControl = [
     'enabled'      => true,
     'mode'         => 'boost-local',
-    'boostOnPath'  => 'data.jsn?bststrt=1',
-    'boostOffPath' => 'data.jsn?bststrt=0',
+    'boostOnBody'  => 'bststrt=1',
+    'boostOffBody' => 'bststrt=0',
 ];
 $logger->Info("Restart json-heizung Logfile $logf paramsFile $paramsFile");
 
@@ -167,8 +167,25 @@ function configureHeizstabControl(array $params): void
     $cfg = $params['heizstabControl'];
     $heizstabControl['enabled']      = !empty($cfg['enabled']);
     $heizstabControl['mode']         = (string)($cfg['mode'] ?? $heizstabControl['mode']);
-    $heizstabControl['boostOnPath']  = ltrim((string)($cfg['boostOnPath'] ?? $heizstabControl['boostOnPath']), '/');
-    $heizstabControl['boostOffPath'] = ltrim((string)($cfg['boostOffPath'] ?? $heizstabControl['boostOffPath']), '/');
+    $heizstabControl['boostOnBody']  = (string)($cfg['boostOnBody'] ?? ($cfg['boostOnPath'] ?? $heizstabControl['boostOnBody']));
+    $heizstabControl['boostOffBody'] = (string)($cfg['boostOffBody'] ?? ($cfg['boostOffPath'] ?? $heizstabControl['boostOffBody']));
+    $heizstabControl['boostOnBody']  = normalizeBoostBody($heizstabControl['boostOnBody'], 'bststrt=1');
+    $heizstabControl['boostOffBody'] = normalizeBoostBody($heizstabControl['boostOffBody'], 'bststrt=0');
+}
+
+function normalizeBoostBody(string $value, string $fallback): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return $fallback;
+    }
+
+    $query = parse_url($value, PHP_URL_QUERY);
+    if (is_string($query) && $query !== '') {
+        return $query;
+    }
+
+    return ltrim($value, '?');
 }
 
 function isHeizstabApiEnabled(): bool
@@ -279,17 +296,98 @@ function heizstabBoostSicherstellung(bool $enable): bool
         return false;
     }
 
-    $path = $enable ? $heizstabControl['boostOnPath'] : $heizstabControl['boostOffPath'];
-    $url = buildHeizstabLocalUrl($path);
-    $logger->Info('Heizstab Sicherstellung ' . ($enable ? 'starten' : 'stoppen') . " URL: $url");
+    $body = $enable ? $heizstabControl['boostOnBody'] : $heizstabControl['boostOffBody'];
+    $logger->Info('Heizstab Sicherstellung ' . ($enable ? 'starten' : 'stoppen') . " POST /setup.jsn Body: $body");
 
-    $response = curlRequest($url);
+    $response = heizstabPostSetup($body);
     if ($response === false) {
         $logger->Error('Heizstab Sicherstellung konnte nicht geschaltet werden');
         return false;
     }
 
     return true;
+}
+
+function appendHeizstabPasswordField(string $body): string
+{
+    global $heizstabAuth;
+
+    if (empty($heizstabAuth['enabled']) || $heizstabAuth['password'] === '') {
+        return $body;
+    }
+
+    $field = $heizstabAuth['passwordField'];
+    if (preg_match('/(?:^|&)' . preg_quote($field, '/') . '=/', $body)) {
+        return $body;
+    }
+
+    return $body . ($body === '' ? '' : '&') . rawurlencode($field) . '=' . rawurlencode($heizstabAuth['password']);
+}
+
+function heizstabPostSetup(string $body, bool $retryAfterLogin = false)
+{
+    global $urlheizStab, $heizstabAuth, $heizstabCookieFile, $logger;
+
+    if (!empty($heizstabAuth['enabled']) && !file_exists($heizstabCookieFile)) {
+        if (!heizstabLogin()) { return false; }
+    }
+
+    $url = buildUrl($urlheizStab, '/setup.jsn');
+    $postBody = appendHeizstabPasswordField($body);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $postBody,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json',
+        ],
+    ]);
+
+    if (!empty($heizstabAuth['enabled'])) {
+        curl_setopt($ch, CURLOPT_COOKIEJAR, $heizstabCookieFile);
+        curl_setopt($ch, CURLOPT_COOKIEFILE, $heizstabCookieFile);
+    }
+
+    if (!empty($heizstabAuth['insecureTls'])) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $logger->Error('Heizstab POST setup cURL Fehler: ' . curl_error($ch) . " URL: $url");
+        curl_close($ch);
+        return false;
+    }
+
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!empty($heizstabAuth['enabled']) && in_array($httpCode, [301, 302, 303, 401, 403], true)) {
+        $logger->Error("Heizstab POST setup Session ungueltig [$httpCode] URL: $url");
+        if ($retryAfterLogin) {
+            return false;
+        }
+
+        @unlink($heizstabCookieFile);
+        if (!heizstabLogin()) {
+            return false;
+        }
+
+        return heizstabPostSetup($body, true);
+    }
+
+    if ($httpCode >= 400) {
+        $logger->Error("Heizstab POST setup HTTP Fehler [$httpCode] URL: $url Antwort: " . trim((string)$response));
+        return false;
+    }
+
+    return $response;
 }
 
 function isHeizstabUrl(string $url): bool
@@ -431,7 +529,17 @@ function ampereRequest(string $baseUrl, string $path, bool $retry): array
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     // Session ungültig → EINMAL neu einloggen
-    if (in_array($code, [301, 302, 303, 401, 403, 404], true)) {
+    if ($code === 404) {
+        if (!$retry) {
+            $logger->Error("ampereRequest 404, versuche EINMAL neu einzuloggen chUrl $chUrl");
+            @unlink($cookieFile);
+            ampereLogin($baseUrl);
+            return ampereRequest($baseUrl, $path, true);
+        }
+        $logger->Error("ampereRequest nach neuem Login weiter 404 chUrl $chUrl response " . trim((string)$response));
+        throw new RuntimeException("HTTP 404 after login");
+    }
+    if (in_array($code, [301, 302, 303, 401, 403], true)) {
         $logger->Error  ("ampereRequest  Session ungültig EINMAL neu einloggen chUrl $chUrl code $code");
         if ($retry) {
             $logger->Error("ampereRequest Session ungültig zweimal falsch Exception chUrl $chUrl code $code");
@@ -981,12 +1089,21 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   // Das IQBox-Item mypv_acelwa_...actualTemperature liefert bei einigen Anlagen HTTP 400/asBigDecimal.
   $wwTemp="??";
   $currentWaterTemp = getCurrentWaterTemp($wwTemp, (float)$temp1);
-  $SOCArr=explode(" ",getfromIQbox("sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge")); // Abrufen des Inhalts der SOC  Batterie Füllstand   
-  $stateBatterie = intval( $SOCArr[0]); // Fuellstand Batterie als int prozentwert
+  $socRaw = getfromIQbox("sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge");
+  $socValid = true;
+  if ($socRaw === false || trim((string)$socRaw) === '') {
+    $socValid = false;
+    $logger->Error("SOC der IQbox konnte nicht gelesen werden. Heizstab-Regelung wird sicherheitshalber gesperrt.");
+    $stateBatterie = 'unbekannt';
+  } else {
+    $SOCArr=explode(" ", (string)$socRaw);
+    $stateBatterie = intval( $SOCArr[0]); // Fuellstand Batterie als int prozentwert
+  }
   $currentTime = date('d.m.Y H:i:s');
   //$logger->Info("currentTime $currentTime");
+  $stateBatterieLog = $socValid ? $stateBatterie . ' %' : 'unbekannt';
 
-  $logger->debugMe("currentTime $currentTime maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C temp von IQBox $wwTemp C  Batterie $stateBatterie %");   // soweit wird geheizt     
+  $logger->debugMe("currentTime $currentTime maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C temp von IQBox $wwTemp C  Batterie $stateBatterieLog");   // soweit wird geheizt
   // überprüfen ob die akt. Zeit innerhalb des Intervalls ist
   $pruefeHeizen=0;
   $cTime = date('H:i');    // zur Intervall Prüfung
@@ -1003,15 +1120,23 @@ while (true) { //endlos Schleife wird mit break abgebrochen
       break;
     }
   }
-  $logger->debugMe("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterie currentWaterTemp ".($currentWaterTemp ?? '??'));
+  $logger->debugMe("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterieLog currentWaterTemp ".($currentWaterTemp ?? '??'));
 
-  $decision = decideHeizstabAction($pruefeHeizen > 0, $isHeating, $currentWaterTemp, (float)$getMinTemp, $stateBatterie, $hysterese, $hystereseSoll );   // hysterwsew auch Rückgbeparameter
+  if (!$socValid) {
+    $hysterese = $hystereseSoll;
+    $decision = [
+      'action' => $heizstabDurchRegelungAktiv ? 0 : null,
+      'reason' => 'SOC nicht lesbar, Regelung gesperrt'
+    ];
+  } else {
+    $decision = decideHeizstabAction($pruefeHeizen > 0, $isHeating, $currentWaterTemp, (float)$getMinTemp, $stateBatterie, $hysterese, $hystereseSoll );   // hysterwsew auch Rückgbeparameter
+  }
 
   if ($decision['action'] === 1) {
-    $logger->Info("heizstab einschalten: ".$decision['reason']." SOC=$stateBatterie hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
+    $logger->Info("heizstab einschalten: ".$decision['reason']." SOC=$stateBatterieLog hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
     if (heizen(1)) { $heizstabDurchRegelungAktiv=true; }
   } elseif ($decision['action'] === 0) {
-    $logger->Info("heizstab ausschalten: ".$decision['reason']." SOC=$stateBatterie hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
+    $logger->Info("heizstab ausschalten: ".$decision['reason']." SOC=$stateBatterieLog hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
     if (heizen(0)) {
       $heizstabDurchRegelungAktiv=false;
     }
@@ -1036,7 +1161,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   $currentDateTime = new DateTime();
   $currentDateTime->add(new DateInterval('PT' . $sleepTime . 'S'));
   $w=$currentDateTime->format('Y-m-d H:i:s');
-  $logger->Info(date('d.m.Y H:i:s')." it: $iteration sleep bis: $w Batt $stateBatterie hysterese $hysterese\n");
+  $logger->Info(date('d.m.Y H:i:s')." it: $iteration sleep bis: $w Batt $stateBatterieLog hysterese $hysterese\n");
   if (isset($logfileHandle)) fclose($logfileHandle);
   $logfile="";
   unset($logfileHandle);

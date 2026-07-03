@@ -126,7 +126,11 @@ class IQBoxSensorService implements SensorFetcherInterface
             return $this->ampereRequest($path, true);
         }
         if ($code !== 200) {
-            $this->logger->Error("IQBox HTTP Fehler $code URL $requestUrl");
+            if ($code === 404) {
+                $this->logger->Error("IQBox REST-Endpunkt nicht gefunden HTTP 404 URL $requestUrl");
+            } else {
+                $this->logger->Error("IQBox HTTP Fehler $code URL $requestUrl");
+            }
             return ["ok" => false];
         }
         return ["ok" => true, "data" => $response];
@@ -151,6 +155,10 @@ class IQBoxSensorService implements SensorFetcherInterface
                 $this->items = $this->getDataFromDevice();
             } catch (\Throwable $e) {
                 $this->logger->Error("IQBox Fehler: fehler beim lesen gettall" . $e->getMessage());
+            }
+            if (!is_array($this->items)) {
+                $this->logger->Error("IQBox REST /rest/items nicht verfuegbar. Sensorwerte werden in diesem Lauf nicht gelesen.");
+                return [];
             }
             foreach ($sensors as $sensor) {
                 $sensorLokalId = !empty($sensor['sensorLokalId']) ? $sensor['sensorLokalId'] : $sensor['sensorID'];
