@@ -155,7 +155,8 @@ function ampereRequest(string $baseUrl, string $path, string $username, string $
         ampereLogin($baseUrl, $username, $password, $cookieFile);
     }
 
-    $ch = curl_init($baseUrl . $path);
+    $url = $baseUrl . $path;
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_COOKIEFILE => $cookieFile,
@@ -168,7 +169,7 @@ function ampereRequest(string $baseUrl, string $path, string $username, string $
     if ($response === false) {
         $error = curl_error($ch);
         curl_close($ch);
-        throw new RuntimeException('cURL error: ' . $error);
+        throw new RuntimeException("cURL error: $error" . PHP_EOL . "URL: $url");
     }
 
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -176,7 +177,7 @@ function ampereRequest(string $baseUrl, string $path, string $username, string $
 
     if (in_array($code, [301, 302, 303, 401, 403], true)) {
         if ($retry) {
-            throw new RuntimeException("Auth failed after retry HTTP $code");
+            throw new RuntimeException("Auth failed after retry HTTP $code" . PHP_EOL . "URL: $url");
         }
 
         @unlink($cookieFile);
@@ -185,17 +186,11 @@ function ampereRequest(string $baseUrl, string $path, string $username, string $
     }
 
     if ($code === 404) {
-        if ($retry) {
-            throw new RuntimeException("HTTP 404 after login");
-        }
-
-        @unlink($cookieFile);
-        ampereLogin($baseUrl, $username, $password, $cookieFile);
-        return ampereRequest($baseUrl, $path, $username, $password, $cookieFile, true);
+        throw new RuntimeException("HTTP 404" . PHP_EOL . "URL: $url");
     }
 
     if ($code !== 200) {
-        throw new RuntimeException("HTTP error $code");
+        throw new RuntimeException("HTTP error $code" . PHP_EOL . "URL: $url");
     }
 
     return [
@@ -214,6 +209,7 @@ function loadItemsRaw(string $baseUrl, string $username, string $password, strin
             throw $e;
         }
 
+        echo "Versuche REST-Fallback: $baseUrl/rest/items/" . PHP_EOL;
         $result = ampereRequest($baseUrl, '/rest/items/', $username, $password, $cookieFile);
     }
     $data = json_decode($result['data'], true);
@@ -388,6 +384,11 @@ function collectHttpMethodHints(string $text): array
 {
     $values = [];
 
+    preg_match_all('/httpClient\.request\(["\']([^"\']+)["\'],`\$\{this\.configuration\.basePath\}([^`]+)`/i', $text, $matches, PREG_SET_ORDER);
+    foreach ($matches as $match) {
+        $values[strtoupper($match[1]) . ' ' . $match[2]] = true;
+    }
+
     preg_match_all('/httpClient\.request\("([^"]+)",`\$\{this\.configuration\.basePath\}([^`]+)`/i', $text, $matches, PREG_SET_ORDER);
     foreach ($matches as $match) {
         $values[strtoupper($match[1]) . ' ' . $match[2]] = true;
@@ -541,111 +542,6 @@ function findTextContexts(string $text, string $needle, int $contextLength, int 
     return $hits;
 }
 
-function probeEndpoint(string $baseUrl, string $path, string $username, string $password, string $cookieFile): array
-{
-    @unlink($cookieFile);
-    try {
-        ampereLogin($baseUrl, $username, $password, $cookieFile);
-    } catch (Throwable $e) {
-        return [
-            'path' => $path,
-            'code' => 'login: ' . $e->getMessage(),
-            'type' => '',
-            'body' => '',
-        ];
-    }
-
-    $url = $baseUrl . $path;
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_COOKIEFILE => $cookieFile,
-        CURLOPT_TIMEOUT => 8,
-        CURLOPT_FOLLOWLOCATION => false,
-        CURLOPT_HEADER => true,
-        CURLOPT_HTTPHEADER => ['Accept: application/json,text/plain,*/*', 'Connection: close'],
-    ]);
-
-    $response = curl_exec($ch);
-    if ($response === false) {
-        $error = curl_error($ch);
-        curl_close($ch);
-        return [
-            'path' => $path,
-            'code' => 'curl: ' . $error,
-            'type' => '',
-            'body' => '',
-        ];
-    }
-
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $headerSize = (int)curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $type = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    curl_close($ch);
-    $headers = substr((string)$response, 0, $headerSize);
-    $response = substr((string)$response, $headerSize);
-
-    $body = preg_replace('/\s+/', ' ', trim((string)$response)) ?? '';
-    if (strlen($body) > 120) {
-        $body = substr($body, 0, 120) . '...';
-    }
-    if (preg_match('/^location:\s*(.+)$/mi', $headers, $matches)) {
-        $body = 'Location: ' . trim($matches[1]) . ($body !== '' ? ' | ' . $body : '');
-    }
-
-    return [
-        'path' => $path,
-        'code' => (string)$code,
-        'type' => $type,
-        'body' => $body,
-    ];
-}
-
-function printEndpointProbe(string $baseUrl, string $username, string $password, string $cookieFile): void
-{
-    echo PHP_EOL . "Diagnose fuer $baseUrl" . PHP_EOL;
-    foreach ([
-        '/',
-        '/auth/login',
-        '/rest',
-        '/rest/',
-        '/rest/tenant-service',
-        '/rest/tenant-service/',
-        '/rest/tenant-service/tenants',
-        '/rest/tenant-service/current-tenant',
-        '/tenant-service',
-        '/tenant-service/',
-        '/tenant-service/tenants',
-        '/tenant-service/current-tenant',
-        '/tenant-service/api/tenants',
-        '/rest/items',
-        '/rest/items/',
-        '/rest/items?recursive=false',
-        '/openhab/rest/items',
-        '/api/rest/items',
-        '/api/items',
-        '/em-setup',
-        '/em-setup/',
-        '/em-setup/api',
-        '/em-setup/rest',
-        '/em-setup/backend',
-        '/em-setup/hems-configurator/devices',
-        '/em-setup/hems-configurator/api/devices',
-        '/em-setup/hems-configurator/rest/devices',
-        '/kiwios-components/app-frame.js',
-    ] as $path) {
-        $probe = probeEndpoint($baseUrl, $path, $username, $password, $cookieFile);
-        echo str_pad($probe['path'], 28) . ' HTTP ' . $probe['code'];
-        if ($probe['type'] !== '') {
-            echo ' ' . $probe['type'];
-        }
-        if ($probe['body'] !== '') {
-            echo ' | ' . $probe['body'];
-        }
-        echo PHP_EOL;
-    }
-}
-
 function curlRaw(string $url, string $cookieFile): array
 {
     $ch = curl_init($url);
@@ -713,6 +609,10 @@ function printEmSetupHints(string $baseUrl, string $cookieFile): void
             continue;
         }
         $seenAssets[$asset] = true;
+        if (isLocaleAsset($asset)) {
+            continue;
+        }
+
         $assetUrl = str_starts_with($asset, 'http') ? $asset : $baseUrl . '/' . ltrim($asset, '/');
         $res = curlRaw($assetUrl, $cookieFile);
         if (!$res['ok']) {
@@ -726,17 +626,39 @@ function printEmSetupHints(string $baseUrl, string $cookieFile): void
             }
         }
 
+        $methodHints = collectHttpMethodHints($res['body']);
         $found = collectApiLikeStrings($res['body']);
-        if (!$found) {
+        if (!$methodHints && !$found) {
             continue;
         }
 
         echo "Asset $asset" . PHP_EOL;
+        foreach (array_slice($methodHints, 0, 80) as $hint) {
+            echo "  HTTP $hint" . PHP_EOL;
+        }
         foreach (array_slice($found, 0, 25) as $hint) {
             echo "  $hint" . PHP_EOL;
         }
         $count++;
     }
+}
+
+function isLocaleAsset(string $asset): bool
+{
+    $name = basename(parse_url($asset, PHP_URL_PATH) ?: $asset);
+    return (bool)preg_match('/^[a-z]{2}(?:-[a-z]{2})?\.m?js$/i', $name);
+}
+
+function requestPathWithRelogin(string $baseUrl, string $path, string $username, string $password, string $cookieFile): array
+{
+    $result = requestPathRaw($baseUrl, $path, $cookieFile);
+    if (in_array($result['code'], [301, 302, 303, 401, 403], true)) {
+        @unlink($cookieFile);
+        ampereLogin($baseUrl, $username, $password, $cookieFile);
+        $result = requestPathRaw($baseUrl, $path, $cookieFile);
+    }
+
+    return $result;
 }
 
 function extractAssetPaths(string $html): array
@@ -987,6 +909,7 @@ function printHelp(): void
     echo '  %text%        LIKE-Suche mit % als Platzhalter, z.B. %battery%power%' . PHP_EOL;
     echo '  r             REST-Daten neu laden' . PHP_EOL;
     echo '  login         Cookie loeschen und neu einloggen' . PHP_EOL;
+    echo '  emsetup       API-Hinweise aus EM.setup-Seiten und JavaScript anzeigen' . PHP_EOL;
     echo '  jsfind text   EM.setup JavaScript nach Text durchsuchen, z.B. jsfind soc' . PHP_EOL;
     echo '  /pfad         direkten GET ausfuehren, z.B. /rest, /rest/items, /em-setup/' . PHP_EOL;
     echo '  raw           komplette JSON-Antwort als Datei speichern' . PHP_EOL;
@@ -1111,6 +1034,14 @@ try {
 
         if (preg_match('/^jsfind\s+(.+)$/i', $filter, $matches)) {
             executeJsFind($baseUrl, trim($matches[1]), $cookieFile);
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['emsetup', 'em-setup', 'apis'], true)) {
+            if (!is_file($cookieFile) || filesize($cookieFile) === 0) {
+                ampereLogin($baseUrl, $username, $password, $cookieFile);
+            }
+            printEmSetupHints($baseUrl, $cookieFile);
             continue;
         }
 

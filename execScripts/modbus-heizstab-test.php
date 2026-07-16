@@ -50,6 +50,7 @@ if (isset($options['help'])) {
     echo "  --host=IP        Heizstab-IP, Default: $defaultHost\n";
     echo "  --port=502       Modbus TCP Port\n";
     echo "  --unit=1         Modbus Unit-ID\n";
+    echo "  --addr=N         Registeradresse lesen\n";
     echo "  --func=3         3=Holding Register, 4=Input Register\n";
     echo "  --one-based      Adresse vor Anfrage um 1 reduzieren\n";
     echo "  --signed         16-bit Wert signed ausgeben\n";

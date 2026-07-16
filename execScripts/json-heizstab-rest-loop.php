@@ -7,6 +7,9 @@ declare(strict_types=1);
  * "raw" schreibt data.jsn und setup.jsn als komplette JSON-Dateien.
  * Eingaben mit "/" rufen einen Heizstab-Pfad direkt auf, z.B. /data.jsn?bststrt=0.
  * "mode local" und "mode api" wechseln zwischen lokalem Heizstab und offizieller my-PV API.
+ * "power", "on" und "off" verwenden /control.html und funktionieren nur,
+ * wenn vorher per "post ctrl=1" auf HTTP-Regelung geschaltet wurde.
+ * "modbus" oder "ctrl2" schaltet danach wieder auf Modbus-TCP (ctrl=2).
  * "q" beendet, "r" laedt neu, "%" funktioniert wie SQL LIKE.
  *
  * Beispiele:
@@ -45,6 +48,8 @@ $apiSerial = (string)($options['api-serial'] ?? ($apiConfig['serial'] ?? ''));
 $apiTokenEnv = (string)($apiConfig['apiTokenEnv'] ?? 'MYPV_API_TOKEN');
 $apiToken = (string)($options['api-token'] ?? ($apiConfig['apiToken'] ?? (getenv($apiTokenEnv) ?: '')));
 $apiInsecureTls = filterBool($options['api-insecure'] ?? ($apiConfig['insecureTls'] ?? false));
+$controlConfig = is_array($params['heizstabControl'] ?? null) ? $params['heizstabControl'] : [];
+$localPowerOn = max(0, (int)($options['power-on'] ?? ($controlConfig['powerOn'] ?? ($apiConfig['powerOn'] ?? 3000))));
 
 try {
     echo "Heizstab REST: $baseUrl" . PHP_EOL;
@@ -126,6 +131,36 @@ try {
             continue;
         }
 
+        if (in_array(strtolower($filter), ['http', 'ctrl1', 'ctrl=1'], true)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: http/ctrl1 ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabPost($baseUrl, 'ctrl=1', $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+                echo 'HTTP-Regelung aktiv: power/on/off kann jetzt ueber control.html arbeiten.' . PHP_EOL;
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['modbus', 'modbustcp', 'ctrl2', 'ctrl=2'], true)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: modbus/ctrl2 ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabPost($baseUrl, 'ctrl=2', $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+                echo 'Modbus-TCP-Regelung aktiv: ctrl=2.' . PHP_EOL;
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
         if (in_array(strtolower($filter), ['booston', 'boost'], true)) {
             if ($mode !== 'local') {
                 echo 'WARNUNG: boost ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
@@ -148,6 +183,48 @@ try {
 
             try {
                 executeHeizstabPost($baseUrl, 'bststrt=0', $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['on', 'ein', 'poweron'], true)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: on/ein ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabControlPower($baseUrl, $localPowerOn, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (in_array(strtolower($filter), ['off', 'aus', 'poweroff'], true)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: off/aus ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabControlPower($baseUrl, 0, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        if (preg_match('/^power\s+(-?\d+)$/i', $filter, $matches)) {
+            if ($mode !== 'local') {
+                echo 'WARNUNG: power ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
+                continue;
+            }
+
+            try {
+                executeHeizstabControlPower($baseUrl, max(0, (int)$matches[1]), $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields);
             } catch (Throwable $e) {
                 echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
             }
@@ -428,7 +505,7 @@ function executeHeizstabPath(
     $decoded = json_decode($body, true);
     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
         foreach (flattenJson($decoded, ltrim($path, '/')) as $item) {
-            echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
+            echo $item['path'] . ': ' . formatValue($item['value']) . PHP_EOL;
         }
         return;
     }
@@ -459,12 +536,77 @@ function executeHeizstabPost(
     $decoded = json_decode($responseBody, true);
     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
         foreach (flattenJson($decoded, 'setup.jsn POST') as $item) {
-            echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
+            echo $item['path'] . ': ' . formatValue($item['value']) . PHP_EOL;
         }
         return;
     }
 
     echo $responseBody . PHP_EOL;
+}
+
+function executeHeizstabControlPower(
+    string &$baseUrl,
+    int $power,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields
+): void {
+    $power = max(0, min(6500, $power));
+    $body = http_build_query(['power' => $power]);
+    $result = postFormWithRelogin($baseUrl, '/control.html', $body, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, false);
+    $url = buildUrl($baseUrl, '/control.html');
+
+    echo 'POST ' . $url . PHP_EOL;
+    echo 'Full POST: ' . $url . ' Body: ' . $body . PHP_EOL;
+    echo 'cURL: ' . buildCurlPostCommand($url, $body, $cookieFile, $insecureTls, $authEnabled) . PHP_EOL;
+    echo 'Hinweis: power/on/off funktioniert nur nach HTTP-Regelung: post ctrl=1' . PHP_EOL;
+    echo 'Body: ' . $body . PHP_EOL;
+    echo 'HTTP ' . $result['http_code'] . PHP_EOL;
+
+    $responseBody = trim($result['body']);
+    if ($responseBody !== '') {
+        echo $responseBody . PHP_EOL;
+    }
+}
+
+function buildCurlPostCommand(string $url, string $body, string $cookieFile, bool $insecureTls, bool $authEnabled): string
+{
+    $parts = ['curl'];
+
+    if ($insecureTls) {
+        $parts[] = '-k';
+    }
+
+    $parts[] = '-X';
+    $parts[] = 'POST';
+    $parts[] = '-H';
+    $parts[] = shellQuoteForDisplay('Content-Type: application/x-www-form-urlencoded');
+    $parts[] = '-H';
+    $parts[] = shellQuoteForDisplay('Accept: application/json');
+
+    if ($authEnabled) {
+        $parts[] = '-b';
+        $parts[] = shellQuoteForDisplay($cookieFile);
+        $parts[] = '-c';
+        $parts[] = shellQuoteForDisplay($cookieFile);
+    }
+
+    $parts[] = '--data';
+    $parts[] = shellQuoteForDisplay($body);
+    $parts[] = shellQuoteForDisplay($url);
+
+    return implode(' ', $parts);
+}
+
+function shellQuoteForDisplay(string $value): string
+{
+    return '"' . str_replace('"', '\\"', $value) . '"';
 }
 
 function fetchRawWithRelogin(
@@ -521,36 +663,54 @@ function postSetupWithRelogin(
     ?string $username,
     array $extraFields
 ): array {
+    return postFormWithRelogin($baseUrl, '/setup.jsn', $body, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $authEnabled, $usernameField, $username, $extraFields, true);
+}
+
+function postFormWithRelogin(
+    string &$baseUrl,
+    string $path,
+    string $body,
+    string $loginPath,
+    string $passwordField,
+    string $password,
+    string $cookieFile,
+    bool &$insecureTls,
+    bool $authEnabled,
+    ?string $usernameField,
+    ?string $username,
+    array $extraFields,
+    bool $appendPassword
+): array {
     if ($authEnabled) {
         ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
     }
 
-    $postBody = appendPasswordField($body, $passwordField, $password, $authEnabled);
-    $result = curlPostForm(buildUrl($baseUrl, '/setup.jsn'), $postBody, $cookieFile, $insecureTls, $authEnabled);
+    $postBody = $appendPassword ? appendPasswordField($body, $passwordField, $password, $authEnabled) : $body;
+    $result = curlPostForm(buildUrl($baseUrl, $path), $postBody, $cookieFile, $insecureTls, $authEnabled);
 
     if (shouldSwitchToHttps($baseUrl, $result['http_code'], $result['body'])) {
         $baseUrl = switchBaseUrlToHttps($baseUrl);
-        echo "/setup.jsn HTTP->HTTPS Redirect erkannt, neuer Base URL: $baseUrl" . PHP_EOL;
+        echo "$path HTTP->HTTPS Redirect erkannt, neuer Base URL: $baseUrl" . PHP_EOL;
         @unlink($cookieFile);
 
         if ($authEnabled) {
             ensureElwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
         }
 
-        $postBody = appendPasswordField($body, $passwordField, $password, $authEnabled);
-        $result = curlPostForm(buildUrl($baseUrl, '/setup.jsn'), $postBody, $cookieFile, $insecureTls, $authEnabled);
+        $postBody = $appendPassword ? appendPasswordField($body, $passwordField, $password, $authEnabled) : $body;
+        $result = curlPostForm(buildUrl($baseUrl, $path), $postBody, $cookieFile, $insecureTls, $authEnabled);
     }
 
     if ($authEnabled && in_array($result['http_code'], [301, 302, 303, 401, 403], true)) {
-        echo "/setup.jsn Session abgelaufen oder Login erforderlich (HTTP {$result['http_code']}). Re-Login ..." . PHP_EOL;
+        echo "$path Session abgelaufen oder Login erforderlich (HTTP {$result['http_code']}). Re-Login ..." . PHP_EOL;
         @unlink($cookieFile);
         elwaLogin($baseUrl, $loginPath, $passwordField, $password, $cookieFile, $insecureTls, $usernameField, $username, $extraFields);
-        $postBody = appendPasswordField($body, $passwordField, $password, $authEnabled);
-        $result = curlPostForm(buildUrl($baseUrl, '/setup.jsn'), $postBody, $cookieFile, $insecureTls, $authEnabled);
+        $postBody = $appendPassword ? appendPasswordField($body, $passwordField, $password, $authEnabled) : $body;
+        $result = curlPostForm(buildUrl($baseUrl, $path), $postBody, $cookieFile, $insecureTls, $authEnabled);
     }
 
     if ($result['http_code'] < 200 || $result['http_code'] >= 300) {
-        throw new RuntimeException("POST HTTP Fehler {$result['http_code']} fuer " . buildUrl($baseUrl, '/setup.jsn') . ' Antwort: ' . trim($result['body']));
+        throw new RuntimeException("POST HTTP Fehler {$result['http_code']} fuer " . buildUrl($baseUrl, $path) . ' Antwort: ' . trim($result['body']));
     }
 
     return $result;
@@ -751,7 +911,10 @@ function flattenJson(array $data, string $source, string $prefix = ''): array
     $rows = [];
 
     foreach ($data as $key => $value) {
-        $path = $prefix === '' ? (string)$key : $prefix . '.' . $key;
+        $keyText = (string)$key;
+        $path = $prefix === ''
+            ? $keyText
+            : (is_int($key) ? $prefix . '[' . $keyText . ']' : $prefix . '.' . $keyText);
 
         if (is_array($value)) {
             $rows = array_merge($rows, flattenJson($value, $source, $path));
@@ -761,7 +924,7 @@ function flattenJson(array $data, string $source, string $prefix = ''): array
         $rows[] = [
             'source' => $source,
             'path' => $path,
-            'key' => (string)$key,
+            'key' => $keyText,
             'value' => $value,
             'type' => gettype($value),
         ];
@@ -780,6 +943,13 @@ function printHelp(): void
     echo '  mode local    lokale Heizstab-REST-Schnittstelle verwenden' . PHP_EOL;
     echo '  mode api      offizielle my-PV API wie checkheizstabdata.php verwenden' . PHP_EOL;
     echo '  login         Session des aktuellen Modus loeschen und neu laden' . PHP_EOL;
+    echo '  http/ctrl1    nur local: HTTP-Regelung aktivieren (POST setup.jsn ctrl=1)' . PHP_EOL;
+    echo '  post ctrl=1   nur local: gleich wie http/ctrl1; Voraussetzung fuer power/on/off' . PHP_EOL;
+    echo '  modbus/ctrl2  nur local: Modbus-TCP-Regelung aktivieren (POST setup.jsn ctrl=2)' . PHP_EOL;
+    echo '  post ctrl=2   nur local: gleich wie modbus/ctrl2; zurueck auf Modbus-TCP' . PHP_EOL;
+    echo '  on/ein        nur local: Heizstab einschalten (POST control.html power=powerOn)' . PHP_EOL;
+    echo '  off/aus       nur local: Heizstab ausschalten (POST control.html power=0)' . PHP_EOL;
+    echo '  power 1000    nur local: Leistung setzen (POST control.html power=1000, 0-6500 W)' . PHP_EOL;
     echo '  boost         lokalen Sicherstellungs-Boost starten (POST setup.jsn bststrt=1)' . PHP_EOL;
     echo '  boostoff      lokalen Sicherstellungs-Boost stoppen (POST setup.jsn bststrt=0)' . PHP_EOL;
     echo '  post a=b      lokalen POST auf setup.jsn ausfuehren, z.B. post bststrt=1' . PHP_EOL;
@@ -874,6 +1044,10 @@ function formatValue($value): string
 
     if (is_bool($value)) {
         return $value ? 'true' : 'false';
+    }
+
+    if (is_array($value)) {
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
     }
 
     return (string)$value;

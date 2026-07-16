@@ -50,6 +50,14 @@ try {
     if ($table === 'tl_coh_sensors') {
         $protectedFields[] = 'historycount';
     }
+    $db->begin_transaction();
+
+    // Beim Sensor-Push sendet der Master nur aktive Sensoren.
+    // Die Raspi-Konfiguration wird deshalb komplett durch diese Liste ersetzt.
+    if ($table === 'tl_coh_sensors') {
+        $db->query("DELETE FROM `$table`");
+    }
+
     // ---------------- Insert / Update ----------------
     $inserted = 0;
     $updated  = 0;
@@ -87,6 +95,8 @@ try {
         $stmt->close();
     }
 
+    $db->commit();
+
     echo json_encode([
         'ok'            => true,
         'table'         => $table,
@@ -96,6 +106,13 @@ try {
     ], JSON_UNESCAPED_UNICODE);
 }
 catch (Throwable $e) {
+    if (isset($db) && $db instanceof mysqli) {
+        try {
+            $db->rollback();
+        } catch (Throwable $rollbackError) {
+        }
+    }
+
     http_response_code(500);
     echo json_encode([
         'ok'    => false,
