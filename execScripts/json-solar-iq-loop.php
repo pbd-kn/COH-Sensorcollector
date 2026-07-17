@@ -17,6 +17,7 @@ const APP_VERSION = '1.14.4';
 
 date_default_timezone_set('Europe/Berlin');
 
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
 $command = strtolower(trim((string)($argv[1] ?? 'loop')));
 $tokenFile = getTokenFile();
 
@@ -76,6 +77,7 @@ try {
     fwrite(STDERR, 'FEHLER: ' . $e->getMessage() . PHP_EOL);
     exit(1);
 }
+}
 
 function createCloudContext(string $tokenFile, bool $forceBrowserLogin = false): array
 {
@@ -91,7 +93,7 @@ function createCloudContext(string $tokenFile, bool $forceBrowserLogin = false):
 
             echo 'WARNUNG: Ampere.IQ-Anmeldung ist nicht mehr gueltig. Automatischer Login wird versucht.'
                 . PHP_EOL;
-            $tokens = passwordLogin($tokenFile, getLoginFile());
+            $tokens = passwordLogin($tokenFile, $tokenFile);
         }
     }
 

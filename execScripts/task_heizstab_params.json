@@ -1,53 +1,60 @@
 {
-  "stop": false,
-  "repeat": "30",
-  "logfile": "./heizstabserver.log",
-  "Heizintervalle": [
-    {
-      "an": "12:00",
-      "aus": "13:00"
-    },
-    {
-      "an": "16:00",
-      "aus": "17:00"
-    }
-  ],
-  "urlheizStab": "https://192.168.178.68",
-  "heizstabAuth": {
-    "enabled": true,
-    "loginPath": "/auth.jsn",
-    "password": "14881488",
-    "passwordField": "pw",
-    "cookieDir": "/home/peter/scripts/coh/cookies",
-    "insecureTls": true,
-    "extraFields": {}
-  },
-  "heizstabApi": {
-    "enabled": true,
-    "baseUrl": "https://api.my-pv.com/api/v1",
-    "serial": "1601512605280006",
-    "apiToken": "myb7e6dc0bb7852e61f7c3d74531512ad72a585f550be7a1PV",
-    "dataEndpoint": "data",
-    "setupEndpoint": "setup",
-    "powerEndpoint": "power",
-    "insecureTls": true,
-    "powerOn": 3000,
-    "testPower": 2000,
-    "testDurationSeconds": 480,
-    "testValidForMinutes": 8,
-    "targetWaterTemp": 60,
-    "validForMinutes": 20,
-    "timeBoostOverride": 0,
-    "timeBoostValue": 0,
-    "legionellaBoostBlock": 1
-  },
-  "heizstabControl": {
-    "enabled": true,
-    "mode": "boost-local",
-    "boostOnBody": "bststrt=1",
-    "boostOffBody": "bststrt=0"
-  },
-  "heizstabRestMode": "local",
-  "urlIQbox": "192.168.178.26",
-  "debug": "1"
+    "stop":  false,
+    "repeat":  "30",
+    "logfile":  "./heizstabserver.log",
+    "Heizintervalle":  [
+                           {
+                               "an":  "12:00",
+                               "aus":  "13:00"
+                           },
+                           {
+                               "an":  "16:00",
+                               "aus":  "17:00"
+                           }
+                       ],
+    "urlheizStab":  "https://192.168.178.68",
+    "heizstabAuth":  {
+                         "enabled":  true,
+                         "loginPath":  "/auth.jsn",
+                         "password":  "14881488",
+                         "passwordField":  "pw",
+                         "cookieDir":  "/home/peter/scripts/coh/cookies",
+                         "insecureTls":  true,
+                         "extraFields":  {
+
+                                         }
+                     },
+    "heizstabApi":  {
+                        "enabled":  true,
+                        "baseUrl":  "https://api.my-pv.com/api/v1",
+                        "serial":  "1601512605280006",
+                        "apiToken":  "myb7e6dc0bb7852e61f7c3d74531512ad72a585f550be7a1PV",
+                        "dataEndpoint":  "data",
+                        "setupEndpoint":  "setup",
+                        "powerEndpoint":  "power",
+                        "insecureTls":  true,
+                        "powerOn":  3000,
+                        "testPower":  2000,
+                        "testDurationSeconds":  480,
+                        "testValidForMinutes":  8,
+                        "targetWaterTemp":  60,
+                        "validForMinutes":  20,
+                        "timeBoostOverride":  0,
+                        "timeBoostValue":  0,
+                        "legionellaBoostBlock":  1
+                    },
+    "heizstabControl":  {
+                            "enabled":  true,
+                            "mode":  "boost-local",
+                            "boostOnBody":  "bststrt=1",
+                            "boostOffBody":  "bststrt=0"
+                        },
+    "heizstabRestMode":  "local",
+    "debug":  "1",
+    "ampereIqCloud":  {
+                          "enabled":  true,
+                          "paramsFile":  "task_solar_params.json",
+                          "retries":  3,
+                          "retryDelay":  10
+                      }
 }

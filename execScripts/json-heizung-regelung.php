@@ -1,0 +1,1194 @@
+<?php
+// gedacht als endlosschleife die über Parameter aus einer dartei versorgt wird versorgt wird
+// check ob geheizt werden soll
+// Schreibt die wesentlichen Werte der Smartbox und des Heizstabes in die Datenbank   (derzeit noch nicht)
+
+// start // php json-heizung-regelung.php &
+// sicherer Cloudtest // php json-heizung-regelung.php cloud-test [Parameterdatei]
+// beenden mit ssh ende oder 
+// ps aux | grep json-heizung
+// kill (erste Zahl aus dem ergebnis
+
+require_once __DIR__ . '/Logger.php';
+require_once __DIR__ . '/json-solar-iq-loop.php';
+$debug=true;
+$logf="/home/peter/coh/logs/heizstabserver.log";
+$logger = new Logger();
+$logger->setLogfile ($logf);
+$logger->setDebug($debug);
+$logger->Info("json-heizung-regelung startet mit Ampere.IQ-Cloudzugriff");
+// als Globale Daten verwenden
+$urlheizStab='http://192.168.178.46/';
+$paramsFile = __DIR__ . '/task_heizstab_params.json';   // Parameterdatei neben diesem Script
+$ampereIqCloud = [
+    'enabled'    => true,
+    'paramsFile' => __DIR__ . '/task_solar_params.json',
+    'retries'    => 3,
+    'retryDelay' => 10,
+];
+$heizstabCookieDir = '/home/peter/scripts/coh/cookies';
+$heizstabCookieFile = '';
+$heizstabAuth = [
+    'enabled'       => true,
+    'loginPath'     => '/auth.jsn',
+    'username'      => null,
+    'password'      => '',
+    'usernameField' => null,
+    'passwordField' => 'pw',
+    'extraFields'   => [],
+    'insecureTls'   => false,
+];
+$heizstabApi = [
+    'enabled'                 => false,
+    'baseUrl'                 => 'https://api.my-pv.com/api/v1',
+    'serial'                  => '',
+    'apiToken'                => '',
+    'apiTokenEnv'             => 'MYPV_API_TOKEN',
+    'dataEndpoint'            => 'data',
+    'setupEndpoint'           => 'setup',
+    'powerEndpoint'           => 'power',
+    'insecureTls'             => false,
+    'powerOn'                 => 3000,
+    'targetWaterTemp'         => 60,
+    'validForMinutes'         => 20,
+    'timeBoostOverride'       => 0,
+    'timeBoostValue'          => 0,
+    'legionellaBoostBlock'    => 1,
+];
+$heizstabControl = [
+    'enabled'      => true,
+    'mode'         => 'boost-local',
+    'boostOnBody'  => 'bststrt=1',
+    'boostOffBody' => 'bststrt=0',
+];
+$logger->Info("Restart json-heizung-regelung Logfile $logf paramsFile $paramsFile");
+
+$logfile="";
+$logfileHandle;
+$aktData = [];
+$setupData = [];
+$lastday = 0;      // zuletzt bearbeiteter Tag
+$lastMon = 0;      // zuletzt bearbeiteter Monat
+
+$hystereseSoll=40; // wenn heizen eingeschaltet wird, so muss der füllstand des Akkus mindestens
+$hysterese=0;      // nach einem einschalten der Heizung wird erst wieder geheizt wenn die Hysterese des Akkus erreicht wird,
+$heizstabDurchRegelungAktiv=false; // nur dann am Intervallende automatisch ausschalten
+$repeat = 15;      // whileSchleife alle 15 Min
+
+
+function normalizeBaseUrl(string $value, string $defaultScheme = 'http'): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (!preg_match('~^https?://~i', $value)) {
+        $value = $defaultScheme . '://' . $value;
+    }
+
+    return rtrim($value, '/') . '/';
+}
+
+function buildUrl(string $baseUrl, string $path): string
+{
+    return rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+}
+
+function buildDefaultCookieFile(string $baseUrl, string $cookieDir, string $prefix): string
+{
+    $host = parse_url($baseUrl, PHP_URL_HOST) ?: 'unknown';
+    $port = parse_url($baseUrl, PHP_URL_PORT);
+    $cookieName = $prefix . '_' . sanitizeCookieName($host . ($port ? '_' . $port : '')) . '_cookie.txt';
+
+    return rtrim($cookieDir, '/') . '/' . $cookieName;
+}
+
+function sanitizeCookieName(string $value): string
+{
+    $value = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $value) ?? 'unknown';
+    return trim($value, '_') ?: 'unknown';
+}
+
+function configureAmpereIqCloud(array $params): void
+{
+    global $ampereIqCloud;
+
+    if (!isset($params['ampereIqCloud']) || !is_array($params['ampereIqCloud'])) {
+        return;
+    }
+
+    $cfg = $params['ampereIqCloud'];
+    $ampereIqCloud['enabled'] = !array_key_exists('enabled', $cfg) || !empty($cfg['enabled']);
+    $configuredFile = trim((string)($cfg['paramsFile'] ?? $ampereIqCloud['paramsFile']));
+    if ($configuredFile !== '') {
+        if (!preg_match('~^(?:[A-Za-z]:[\\/]|/)~', $configuredFile)) {
+            $configuredFile = __DIR__ . DIRECTORY_SEPARATOR . ltrim($configuredFile, '/\\');
+        }
+        $ampereIqCloud['paramsFile'] = $configuredFile;
+    }
+    $ampereIqCloud['retries'] = max(1, (int)($cfg['retries'] ?? $ampereIqCloud['retries']));
+    $ampereIqCloud['retryDelay'] = max(0, (int)($cfg['retryDelay'] ?? $ampereIqCloud['retryDelay']));
+}
+
+function getAmpereIqRegulationValues()
+{
+    global $ampereIqCloud, $logger;
+
+    if (empty($ampereIqCloud['enabled'])) {
+        $logger->Error('Ampere.IQ-Cloudzugriff ist deaktiviert');
+        return false;
+    }
+
+    $paramsFile = (string)$ampereIqCloud['paramsFile'];
+    $retries = (int)$ampereIqCloud['retries'];
+    for ($attempt = 1; $attempt <= $retries; $attempt++) {
+        try {
+            $context = createCloudContext($paramsFile);
+            $id = rawurlencode($context['installationId']);
+            $power = apiGet("/api/v1/installation/$id/now/all/power", $context['accessToken']);
+            $heatingRod = loadHeatingRodDevice($context['installationId'], $context['accessToken']);
+            $values = specificationValuesByName($heatingRod['details']);
+
+            $batterySoc = $power['batterySoc'] ?? null;
+            $temperature = $values['temperature'] ?? null;
+            $targetTemperature = $values['targetTemperature'] ?? null;
+            if (!is_numeric($batterySoc) || !is_numeric($temperature) || !is_numeric($targetTemperature)) {
+                throw new RuntimeException(
+                    'Cloudwerte fehlen: batterySoc=' . formatCloudLogValue($batterySoc)
+                    . ', temperature=' . formatCloudLogValue($temperature)
+                    . ', targetTemperature=' . formatCloudLogValue($targetTemperature)
+                );
+            }
+
+            return [
+                'batterySoc' => (float)$batterySoc,
+                'temperature' => (float)$temperature,
+                'targetTemperature' => (float)$targetTemperature,
+                'temperatureTimestamp' => $values['temperatureTimestamp'] ?? null,
+            ];
+        } catch (Throwable $e) {
+            $logger->Error(
+                "Ampere.IQ-Cloudversuch $attempt/$retries fehlgeschlagen: " . $e->getMessage()
+            );
+            if ($attempt < $retries && $ampereIqCloud['retryDelay'] > 0) {
+                sleep((int)$ampereIqCloud['retryDelay']);
+            }
+        }
+    }
+
+    return false;
+}
+
+function formatCloudLogValue($value): string
+{
+    if ($value === null) {
+        return 'null';
+    }
+    if (is_scalar($value)) {
+        return (string)$value;
+    }
+
+    return gettype($value);
+}
+function configureHeizstabAuth(array $params): void
+{
+    global $urlheizStab, $heizstabAuth, $heizstabCookieDir, $heizstabCookieFile;
+
+    if (!isset($params['heizstabAuth']) || !is_array($params['heizstabAuth'])) {
+        $heizstabAuth['enabled'] = false;
+        return;
+    }
+
+    $cfg = $params['heizstabAuth'];
+    $heizstabAuth['enabled']       = !empty($cfg['enabled']);
+    $heizstabAuth['loginPath']     = (string)($cfg['loginPath'] ?? $heizstabAuth['loginPath']);
+    $heizstabAuth['username']      = isset($cfg['username']) ? (string)$cfg['username'] : null;
+    $heizstabAuth['password']      = (string)($cfg['password'] ?? '');
+    $heizstabAuth['usernameField'] = isset($cfg['usernameField']) ? (string)$cfg['usernameField'] : null;
+    $heizstabAuth['passwordField'] = (string)($cfg['passwordField'] ?? $heizstabAuth['passwordField']);
+    $heizstabAuth['extraFields']   = is_array($cfg['extraFields'] ?? null) ? $cfg['extraFields'] : [];
+    $heizstabAuth['insecureTls']   = !empty($cfg['insecureTls']);
+
+    $heizstabCookieDir = (string)($cfg['cookieDir'] ?? $heizstabCookieDir);
+    $heizstabCookieFile = !empty($cfg['cookieFile'])
+        ? (string)$cfg['cookieFile']
+        : buildDefaultCookieFile($urlheizStab, $heizstabCookieDir, 'heizstab');
+}
+
+function configureHeizstabApi(array $params): void
+{
+    global $heizstabApi;
+
+    if (!isset($params['heizstabApi']) || !is_array($params['heizstabApi'])) {
+        $heizstabApi['enabled'] = false;
+        return;
+    }
+
+    $cfg = $params['heizstabApi'];
+    $heizstabApi['enabled']              = !empty($cfg['enabled']);
+    $heizstabApi['baseUrl']              = rtrim((string)($cfg['baseUrl'] ?? $heizstabApi['baseUrl']), '/');
+    $heizstabApi['serial']               = trim((string)($cfg['serial'] ?? $heizstabApi['serial']));
+    $heizstabApi['apiToken']             = (string)($cfg['apiToken'] ?? $heizstabApi['apiToken']);
+    $heizstabApi['apiTokenEnv']          = (string)($cfg['apiTokenEnv'] ?? $heizstabApi['apiTokenEnv']);
+    $heizstabApi['dataEndpoint']         = trim((string)($cfg['dataEndpoint'] ?? $heizstabApi['dataEndpoint']), '/');
+    $heizstabApi['setupEndpoint']        = trim((string)($cfg['setupEndpoint'] ?? $heizstabApi['setupEndpoint']), '/');
+    $heizstabApi['powerEndpoint']        = trim((string)($cfg['powerEndpoint'] ?? $heizstabApi['powerEndpoint']), '/');
+    $heizstabApi['insecureTls']          = !empty($cfg['insecureTls']);
+    $heizstabApi['powerOn']              = max(0, (int)($cfg['powerOn'] ?? $heizstabApi['powerOn']));
+    $heizstabApi['targetWaterTemp']      = max(1, (float)($cfg['targetWaterTemp'] ?? $heizstabApi['targetWaterTemp']));
+    $heizstabApi['validForMinutes']      = max(1, (int)($cfg['validForMinutes'] ?? $heizstabApi['validForMinutes']));
+    $heizstabApi['timeBoostOverride']    = (int)($cfg['timeBoostOverride'] ?? $heizstabApi['timeBoostOverride']);
+    $heizstabApi['timeBoostValue']       = (int)($cfg['timeBoostValue'] ?? $heizstabApi['timeBoostValue']);
+    $heizstabApi['legionellaBoostBlock'] = (int)($cfg['legionellaBoostBlock'] ?? $heizstabApi['legionellaBoostBlock']);
+}
+
+function configureHeizstabControl(array $params): void
+{
+    global $heizstabControl;
+
+    if (!isset($params['heizstabControl']) || !is_array($params['heizstabControl'])) {
+        return;
+    }
+
+    $cfg = $params['heizstabControl'];
+    $heizstabControl['enabled']      = !empty($cfg['enabled']);
+    $heizstabControl['mode']         = (string)($cfg['mode'] ?? $heizstabControl['mode']);
+    $heizstabControl['boostOnBody']  = (string)($cfg['boostOnBody'] ?? ($cfg['boostOnPath'] ?? $heizstabControl['boostOnBody']));
+    $heizstabControl['boostOffBody'] = (string)($cfg['boostOffBody'] ?? ($cfg['boostOffPath'] ?? $heizstabControl['boostOffBody']));
+    $heizstabControl['boostOnBody']  = normalizeBoostBody($heizstabControl['boostOnBody'], 'bststrt=1');
+    $heizstabControl['boostOffBody'] = normalizeBoostBody($heizstabControl['boostOffBody'], 'bststrt=0');
+}
+
+function normalizeBoostBody(string $value, string $fallback): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return $fallback;
+    }
+
+    $query = parse_url($value, PHP_URL_QUERY);
+    if (is_string($query) && $query !== '') {
+        return $query;
+    }
+
+    return ltrim($value, '?');
+}
+
+function isHeizstabApiEnabled(): bool
+{
+    global $heizstabApi, $logger;
+    //Wenn $heizstabApi['enabled'] gesetzt ist und einen „wahren“ Wert hat → true
+    //Wenn es fehlt, leer, false, 0, "0", null oder "" ist → false
+    $logger->debugMe("isHeizstabApiEnabled " . !empty($heizstabApi['enabled']));
+
+    return !empty($heizstabApi['enabled']);
+}
+
+function getHeizstabApiToken(): string
+{
+    global $heizstabApi;
+    if ($heizstabApi['apiToken'] !== '') { return $heizstabApi['apiToken'];}   // so arbeit ich notfall wird noch in env geschaut
+    $envToken = getenv($heizstabApi['apiTokenEnv']);
+    return is_string($envToken) ? $envToken : '';
+}
+
+function buildHeizstabApiUrl(string $endpoint): string
+{
+    global $heizstabApi;
+
+    return rtrim($heizstabApi['baseUrl'], '/') . '/device/' . rawurlencode($heizstabApi['serial']) . '/' . ltrim($endpoint, '/');
+}
+
+function buildHeizstabLocalUrl(string $path): string
+{
+    global $urlheizStab;
+
+    return rtrim($urlheizStab, '/') . '/' . ltrim($path, '/');
+}
+
+function heizstabApiRequest(string $method, string $endpoint, ?array $payload = null)
+{
+    global $heizstabApi, $logger;
+
+    $token = getHeizstabApiToken();
+    if ($heizstabApi['serial'] === '' || $token === '') {
+        $logger->Error('my-PV API aktiv, aber serial oder apiToken fehlt');
+        return false;
+    }
+    $url = buildHeizstabApiUrl($endpoint);                 // endpoint ist die angabe der neuen apischnittstelle s. https://api.my-pv.com/api-docs/#/
+    $headers = [
+        'Authorization: Bearer ' . $token,
+        'Accept: application/json',
+        'Content-Type: application/json',
+    ];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_HTTPHEADER     => $headers,
+    ]);
+    if (!empty($heizstabApi['insecureTls'])) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
+    if ($method !== 'GET') {                                    // mache einen post mit der $method  in pyload wird das feld für den p ostrequest übergeben
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload ?? [], JSON_UNESCAPED_SLASHES));
+    }
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $logger->Error('my-PV API cURL Fehler: ' . curl_error($ch) . " URL: $url");
+        curl_close($ch);
+        return false;
+    }
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code < 200 || $code >= 300) {
+        $logger->Error("my-PV API HTTP Fehler [$code] URL: $url Antwort: " . trim((string)$response));
+        return false;
+    }
+    return (string)$response;
+}
+
+function heizstabApiGetJson(string $endpoint)
+{
+    global $logger;
+
+    $response = heizstabApiRequest('GET', $endpoint);
+    if ($response === false) {
+        return false;
+    }
+    $data = json_decode($response, true);
+    if (!is_array($data)) {
+        $logger->Error("my-PV API Antwort ist kein JSON-Array Endpoint: $endpoint Antwort: " . trim($response));
+        return false;
+    }
+
+    return $data;
+}
+
+function heizstabBoostSicherstellung(bool $enable): bool
+{
+    global $heizstabControl, $logger;
+
+    if (empty($heizstabControl['enabled'])) {
+        $logger->Info('Heizstab-Steuerung deaktiviert, Sicherstellung wird nicht geschaltet');
+        return false;
+    }
+
+    if ($heizstabControl['mode'] !== 'boost-local') {
+        $logger->Error('Unbekannter Heizstab-Steuermodus: ' . $heizstabControl['mode']);
+        return false;
+    }
+
+    $body = $enable ? $heizstabControl['boostOnBody'] : $heizstabControl['boostOffBody'];
+    $logger->Info('Heizstab Sicherstellung ' . ($enable ? 'starten' : 'stoppen') . " POST /setup.jsn Body: $body");
+
+    $response = heizstabPostSetup($body);
+    if ($response === false) {
+        $logger->Error('Heizstab Sicherstellung konnte nicht geschaltet werden');
+        return false;
+    }
+
+    return true;
+}
+
+function appendHeizstabPasswordField(string $body): string
+{
+    global $heizstabAuth;
+
+    if (empty($heizstabAuth['enabled']) || $heizstabAuth['password'] === '') {
+        return $body;
+    }
+
+    $field = $heizstabAuth['passwordField'];
+    if (preg_match('/(?:^|&)' . preg_quote($field, '/') . '=/', $body)) {
+        return $body;
+    }
+
+    return $body . ($body === '' ? '' : '&') . rawurlencode($field) . '=' . rawurlencode($heizstabAuth['password']);
+}
+
+function heizstabPostSetup(string $body, bool $retryAfterLogin = false)
+{
+    global $urlheizStab, $heizstabAuth, $heizstabCookieFile, $logger;
+
+    if (!empty($heizstabAuth['enabled']) && !file_exists($heizstabCookieFile)) {
+        if (!heizstabLogin()) { return false; }
+    }
+
+    $url = buildUrl($urlheizStab, '/setup.jsn');
+    $postBody = appendHeizstabPasswordField($body);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $postBody,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json',
+        ],
+    ]);
+
+    if (!empty($heizstabAuth['enabled'])) {
+        curl_setopt($ch, CURLOPT_COOKIEJAR, $heizstabCookieFile);
+        curl_setopt($ch, CURLOPT_COOKIEFILE, $heizstabCookieFile);
+    }
+
+    if (!empty($heizstabAuth['insecureTls'])) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $logger->Error('Heizstab POST setup cURL Fehler: ' . curl_error($ch) . " URL: $url");
+        curl_close($ch);
+        return false;
+    }
+
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!empty($heizstabAuth['enabled']) && in_array($httpCode, [301, 302, 303, 401, 403], true)) {
+        $logger->Error("Heizstab POST setup Session ungueltig [$httpCode] URL: $url");
+        if ($retryAfterLogin) {
+            return false;
+        }
+
+        @unlink($heizstabCookieFile);
+        if (!heizstabLogin()) {
+            return false;
+        }
+
+        return heizstabPostSetup($body, true);
+    }
+
+    if ($httpCode >= 400) {
+        $logger->Error("Heizstab POST setup HTTP Fehler [$httpCode] URL: $url Antwort: " . trim((string)$response));
+        return false;
+    }
+
+    return $response;
+}
+
+function isHeizstabUrl(string $url): bool
+{
+    global $urlheizStab;
+    return str_starts_with($url, rtrim($urlheizStab, '/') . '/');
+}
+
+/*
+ * macht auth login für Heizstab
+ */
+
+function heizstabLogin(): bool
+{
+    global $urlheizStab, $heizstabAuth, $heizstabCookieFile, $logger;
+    if (empty($heizstabAuth['enabled'])) { return true; }
+    if ($heizstabAuth['password'] === '') {
+        $logger->Error("Heizstab Login aktiv, aber password fehlt");
+        return false;
+    }
+    $dir = dirname($heizstabCookieFile);
+    if (!is_dir($dir)) { @mkdir($dir, 0770, true); }
+
+    $postFields = $heizstabAuth['extraFields'];
+    if (!empty($heizstabAuth['usernameField']) && $heizstabAuth['username'] !== null && $heizstabAuth['username'] !== '') {
+        $postFields[$heizstabAuth['usernameField']] = $heizstabAuth['username'];
+    }
+    $postFields[$heizstabAuth['passwordField']] = $heizstabAuth['password'];
+
+    $loginUrl = buildUrl($urlheizStab, $heizstabAuth['loginPath']);
+    $ch = curl_init($loginUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query($postFields),
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json',
+        ],
+        CURLOPT_COOKIEJAR      => $heizstabCookieFile,
+        CURLOPT_COOKIEFILE     => $heizstabCookieFile,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => false,
+    ]);
+
+    if (!empty($heizstabAuth['insecureTls'])) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $logger->Error("Heizstab Login cURL Fehler: " . curl_error($ch) . " URL: $loginUrl");
+        curl_close($ch);
+        return false;
+    }
+
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!in_array($code, [200, 204, 302, 303], true)) {
+        $logger->Error("Heizstab Login HTTP Fehler [$code] URL: $loginUrl");
+        return false;
+    }
+    return true;
+}
+
+// liest die data.jsn vom Heizstab und gibt sie als Array zurück
+// liefert False bei einem Fehler
+function getdata() {
+    global $urlheizStab,$logger;
+    if (isHeizstabApiEnabled()) {
+      global $heizstabApi;
+      for ($i = 1; $i <= 10; $i++) {
+        $data = heizstabApiGetJson($heizstabApi['dataEndpoint']);
+        if ($data !== false) {
+          return $data;
+        }
+        sleep(10);
+      }
+      $logger->Error("!!! Fehler nach 10 maligen my-PV API Aufruf data");
+      return false;
+    }
+
+    $url=$urlheizStab."data.jsn";
+    for ($i = 1; $i <= 10; $i++) {
+      $content=curlRequest($url);
+      if ($content === false) {
+        //$logger->Error("!!! cURL getData Error:  url: $url"); 
+        sleep(10); // Warte 10 sec
+        continue;
+      }
+      $data = json_decode($content,true);
+      if ($data === null) {
+        //$logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes  url $url");
+        sleep(10); // Warte 10 sec
+        continue;
+      }
+      return $data;
+    }
+    $logger->Error("!!! Fehler nach 10 maligen Aufruf url $url");
+    return false;
+}
+// liest die setup.jsn vom Heizstab und gibt sie als Array zurück
+// liefert False bei einem Fehler
+
+function getsetup() {
+    global $urlheizStab,$logger;
+    if (isHeizstabApiEnabled()) {
+      global $heizstabApi;
+      for ($i = 1; $i <= 10; $i++) {
+        $data = heizstabApiGetJson($heizstabApi['setupEndpoint']);
+        if ($data !== false) {
+          return $data;
+        }
+        sleep(10);
+      }
+      $logger->Error("!!! Fehler nach 10 maligen my-PV API Aufruf setup");
+      return false;
+    }
+
+    $url=$urlheizStab."setup.jsn";
+    for ($i = 1; $i <= 10; $i++) {
+      $content=curlRequest($url);
+      if ($content === false) {
+        //$logger->Error("!!! cURL getsetup Error:  url: $url"); 
+        sleep(10); // Warte 10 sec
+        continue;
+      }
+      if ($content === false) {$logger->Error("!!! cURL Error: " . curl_error($ch)." url: $url"); return false;}
+      $data = json_decode($content,true);
+      if ($data === null) {
+        //$logger->Error("!!! Fehler beim Parsen der JSON-Daten des Heizstabes url $url");
+        sleep(10); // Warte 10 sec
+        continue;
+      }
+      return $data;
+    }
+    $logger->Error("!!! Fehler nach 10 maligen Aufruf url $url");
+    return false;
+}
+
+/*  liefert den wert vom Heizstab aus global $aktData,$setupData;
+ *  
+ */
+function getHeizstabdata ($data) {
+  global $aktData,$setupData,$logger;
+  if (isset($aktData[$data]) )  {  return $aktData[$data];}    
+  else if (isset($setupData[$data]) )  {  return $setupData[$data];}    
+
+  $aliases = [
+    'boostactive' => ['bststrt'],
+    'ctrl'        => ['ctrlstate'],
+    'maxpwr'      => ['power_nominal'],
+    'power_elwa2' => ['power', 'power_act', 'power_actual'],
+  ];
+
+  foreach ($aliases[$data] ?? [] as $alias) {
+    if (isset($aktData[$alias])) { return $aktData[$alias]; }
+    if (isset($setupData[$alias])) { return $setupData[$alias]; }
+  }
+
+  return 0;
+}
+// CURL-Request Funktion, um Redundanz zu vermeiden
+function curlRequest($url, bool $retryAfterLogin = false)
+{
+    global $logger, $heizstabAuth, $heizstabCookieFile;
+
+    $isHeizstab = isHeizstabUrl($url);
+    $logger->debugMe("curlRequest isHeizstab $isHeizstab");
+    if ($isHeizstab && !empty($heizstabAuth['enabled']) && !file_exists($heizstabCookieFile)) {
+        if (!heizstabLogin()) { return false; }
+    }
+    $logger->debugMe("curlRequest beginn init url $url");
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+
+    if ($isHeizstab && !empty($heizstabAuth['enabled'])) {
+        curl_setopt($ch, CURLOPT_COOKIEJAR, $heizstabCookieFile);
+        curl_setopt($ch, CURLOPT_COOKIEFILE, $heizstabCookieFile);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+
+        if (!empty($heizstabAuth['insecureTls'])) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        }
+    }
+
+    $content = curl_exec($ch);
+    // cURL Fehler (Timeout / Host nicht erreichbar usw.)
+    if ($content === false) {
+        $errno = curl_errno($ch);
+        $error = curl_error($ch);
+        $logger->Error(
+            "!!! cURL Fehler [$errno]: $error URL: $url"
+        );
+        curl_close($ch);
+        return false;
+    }
+    // HTTP Status prüfen
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $logger->debugMe("curlRequest nach exec code $httpCode");
+    if ($isHeizstab && !empty($heizstabAuth['enabled']) && in_array($httpCode, [301, 302, 303, 401, 403], true)) {
+        $logger->Error("!!! Heizstab Session ungültig [$httpCode] URL: $url");
+        curl_close($ch);
+
+        if ($retryAfterLogin) {
+            $logger->Error("!!! Heizstab Login Retry fehlgeschlagen URL: $url retryAfterLogin $retryAfterLogin");
+            return false;
+        }
+
+        @unlink($heizstabCookieFile);
+        if (!heizstabLogin()) {
+            return false;
+        }
+
+        return curlRequest($url, true);
+    }
+
+    if ($httpCode >= 400) {
+        $logger->Error(
+            "!!! cURL HTTP Fehler [$httpCode] URL: $url"
+        );
+        curl_close($ch);
+        return false;
+    }
+    curl_close($ch);
+    $logger->debugMe("curlRequest return ok ");
+    return $content;
+}
+function timeToMinutes(string $time): int
+{
+    [$h, $m] = array_map('intval', explode(':', $time));  // dient zum intervalvergleich
+    return $h * 60 + $m;
+}
+
+
+/* startet oder stopt den Heizstab
+ * 
+ * $modus 0 Stopp heizstab
+ * >0   in Steuerungseinstellung Modbus tcp Heizstab starten. Dabei wird aber die Heizstabeinstellung Warmwasser verwendet
+ *      in Steuerungseinstellung http Heizstab starten.  Wert ist die eizustellende Powergröße
+ *      Kommandos ctrl http
+ *      /control.html?power=n n … Set power on the power stage, unlimited range of value The regulation is carried out by a higher-level control system.
+ *      /control.html?pid_power=n The regulation is carried out by the pid-controller of AC ELWA 2
+ *      /control.html?boost=1 activate Boost-Backup manually
+ *      kommandos zum Umstellen ctrl
+ *      http /setup.jsn?ctrl=1&ww1boost=700       auf 70 Grad aufheizen  ctrl 1 = http
+ *      modtcp /setup.jsn?ctrl=2&tout=60      messintervall  ctrl 2 = modbus tcp
+ */      
+function heizen($modus) {
+  global $logger;
+
+  $logger->Info("Heizen Modus Heizstab $modus ueber Sicherstellung/Boost");
+  return heizstabBoostSicherstellung($modus > 0);
+}
+
+// funktionen zur normierung des Status
+function elwaPwrkWh($stat) {   // Power akt Heizstab
+  $resArr['wert'] = round($stat/1000,2);
+  $resArr['einheit']='kWh';
+  return $resArr;
+}
+function elwaPwr($stat) {   // max Power in %
+  $resArr['wert'] = $stat;
+  $resArr['einheit']='%';
+  return $resArr;
+}
+function elwaTemp($stat) {   // Power akt Heizstab
+  $resArr['wert'] = round($stat/10,2);
+  $resArr['einheit']='°C';
+  return $resArr;
+}
+
+function elwaProt($stat) {   // Power akt Heizstab
+  $resArr['wert'] = $stat;
+  switch ($stat) {
+    case 0: case 0: $v='Auto Detec';break;
+    case 1: $v='HTTP';break; 
+    case 2: $v='Modbus TCP';break; 
+    case 3: $v='Fronius Auto';break; 
+    case 4: $v='Fronius Manual';break; 
+    case 5: $v='SMA Home Manager';break; 
+    case 6: $v='Steca Auto';break; 
+    case 7: $v='Varta Auto';break; 
+    case 8: $v='Varta Manual';break; 
+    case 12: $v='my-PV Meter Auto';break; 
+    case 12: $v='my-PV Meter Manual';break; 
+    case 14: $v='my-PV Power Meter Direct';break; 
+    case 10: $v='RCT Power Manual';break; 
+    case 15: $v='SMA Direct meter communication Auto';break; 
+    case 16: $v='SMA Direct meter communication Manual';break; 
+    case 19: $v='Digital Meter P1';break; 
+    case 20: $v='Frequency';break; 
+    case 100: $v='Fronius Sunspec Manual';break; 
+    case 102: $v='Kostal PIKO IQ Plenticore plus Manual';break; 
+    case 103: $v='Kostal Smart Energy Meter Manual';break; 
+    case 104: $v='MEC electronics Manual';break; 
+    case 105: $v='SolarEdge Manual';break; 
+    case 106: $v='Victron Energy 1ph Manual';break; 
+    case 107: $v='Victron Energy 3ph Manual';break; 
+    case 108: $v='Huawei (Modbus TCP) Manual';break; 
+    case 109: $v='Carlo Gavazzi EM24 Manual';break; 
+    case 111: $v='Sungrow Manual';break; 
+    case 112: $v='Fronius Gen24 Manual';break; 
+    case 200: $v='Huawei (Modbus RTU)';break;   
+    case 201: $v='Growatt (Modbus RTU)';break; 
+    case 202: $v='Solax (Modbus RTU)';break; 
+    case 203: $v='Qcells (Modbus RTU)';break; 
+    case 204: $v='IME Conto D4 Modbus MID (Modbus RTU)';break; 
+    default: $v='Protokoll undefinioert';break;
+  }
+  $resArr['einheit']=$v;
+  return $resArr;
+}
+function IQSOC($stat) {   // Füllstand Betterie
+  $statearr = explode(" ", $stat);
+  $resArr['wert'] = $statearr[0];
+  $resArr['einheit']='%';
+  return $resArr;
+}  
+
+function IQkWh($stat) {   // Angabe kWh Wh, Ws
+  $statearr = explode(" ", $stat);
+  $v=strtolower($statearr[1]);
+  if ($v == 'ws') {$value=round($statearr[0]/3600000,2);}
+  elseif ($v == 'wh') {$value=round($statearr[0]/1000,2);}
+  else $value=$statearr[0];
+  $resArr['wert'] = $value;
+  $resArr['einheit']='kWh';
+  return $resArr;
+}  
+function IQkW($stat) {   // Angabe kW W
+  $resArr=[];
+  $valarr = explode("|",$stat);   // sieht der state so aus "1714050990000|4.0 W" dann ist das vor | die Uhrzeit
+  if (count($valarr) > 1) {           // mit zeitangabe
+    // liefere den zeitpunkt der messung in sec
+    $unixzeit_ms=$valarr[0];
+    $unixzeit_sec=$unixzeit_ms/1000;    // Umwandeln in Sekunden (durch 1000 teilen, da die Unixzeit in Millisekunden gegeben ist)
+    $resArr['unixtime'] = $unixzeit_sec;
+    $strWert=$valarr[1];              
+  } else $strWert=$stat;
+
+  $statearr = explode(" ", $strWert);
+  $v=strtolower($statearr[1]);
+  if ($v == 'w') {$value=round($statearr[0]/1000,2);}
+  else $value=$statearr[0];
+  $resArr['wert'] = $value;
+  $resArr['einheit']='kW';
+  return $resArr;
+} 
+ 
+function IQTemp($stat) {   // Temp z.b Batterie
+  $statearr = explode(" ", $stat);
+  $resArr['wert'] = $statearr[0];
+  $resArr['einheit']='°C';
+  return $resArr;
+}
+function writeLog($txt) {
+  global $logger;
+  $logger->debugMe($txt);
+}
+
+function getCurrentWaterTemp($wwTemp, float $temp1): ?float
+{
+    if (is_numeric($wwTemp)) {
+        return (float)$wwTemp;
+    }
+
+    return is_numeric($temp1) ? (float)$temp1 : null;
+}
+
+function normalizeTemperatureValue($value): ?float
+{
+    if (!is_numeric($value)) {
+        return null;
+    }
+
+    $temperature = (float)$value;
+    if ($temperature <= 0) {
+        return null;
+    }
+
+    return $temperature > 100 ? $temperature / 10 : $temperature;
+}
+
+function getTargetWaterTemp(): float
+{
+    global $aktData, $setupData, $heizstabApi;
+
+    foreach (['ww1target', 'ww1boost'] as $field) {
+        if (array_key_exists($field, $aktData)) {
+            $temperature = normalizeTemperatureValue($aktData[$field]);
+            if ($temperature !== null) {
+                return $temperature;
+            }
+        }
+
+        if (array_key_exists($field, $setupData)) {
+            $temperature = normalizeTemperatureValue($setupData[$field]);
+            if ($temperature !== null) {
+                return $temperature;
+            }
+        }
+    }
+
+    return (float)$heizstabApi['targetWaterTemp'];
+}
+
+/* 
+ * entscheidung ob geheizt erden soll
+ * Rückgabewerte
+ * action = 1: Heizstab einschalten
+ * action = 0: Heizstab ausschalten
+ * action = null: Zustand nicht verändern
+ * reason: Begründung für die Entscheidung
+ * Eingabewerte
+ * $isWithinInterval: Liegt die Uhrzeit in einem Heizintervall?
+ * $isHeating: Heizt der Heizstab momentan?
+ * $currentTemp: aktuelle Temperatur aus temperature
+ * $targetTemp: Zieltemperatur aus targetTemperature
+ * $stateBatterie: Akkustand aus batterySoc
+ * $hysterese: aktuelle Wiedereinschaltsperre
+ * $hystereseSoll: Freigabegrenze, derzeit 40 %
+ * Prüfreihenfolge
+ * Akku über 40 %
+ * Bei mehr als 40 % wird die Wiedereinschaltsperre aufgehoben:
+ * $hysterese = 0;
+ * 
+ * Außerhalb des Heizintervalls
+ * Die Funktion ändert nichts:
+ * action = null
+ * Das Ausschalten am Intervallende erfolgt anschließend in der Hauptschleife, aber nur, wenn die Regelung den Heizstab selbst eingeschaltet hatte.
+ * 
+ * Temperatur fehlt
+ * Ohne gültige Isttemperatur wird nichts geschaltet.
+ * 
+ * Zieltemperatur erreicht
+ * Wenn currentTemp >= targetTemp gilt:
+ * Heizstab läuft: action = 0
+ * Heizstab ist bereits aus: action = null
+ * 
+ * Akku unter 20 %
+ * Die Hysterese wird auf 40 gesetzt.
+ * Heizstab läuft: ausschalten
+ * Heizstab ist aus: nichts verändern
+ * 
+ * Heizstab läuft bereits
+ * Wenn die Temperatur noch unter dem Ziel liegt und der Akku mindestens 20 % hat, darf er weiterheizen:
+ * action = null
+ * 
+ * Akku über 40 % und Heizstab aus
+ * Temperatur ist zu niedrig, daher:
+ * action = 1
+ * 
+ * Akku zwischen 20 und 40 %, Hysterese noch frei
+ * Wenn $hysterese === 0, darf einmal eingeschaltet werden. Gleichzeitig wird die Hysterese auf 40 gesetzt.
+ * 
+ * Hysterese aktiv
+ * Der Heizstab bleibt aus, bis der Akku wieder über 40 % steigt.
+ */
+
+function decideHeizstabAction( bool $isWithinInterval, bool $isHeating, ?float $currentTemp, float $targetTemp, int $stateBatterie, int &$hysterese, int $hystereseSoll ): array {
+    if ($stateBatterie > $hystereseSoll) { $hysterese = 0; }
+    if (!$isWithinInterval) { return [ 'action' => null, 'reason' => 'außerhalb Intervall, Regelung pausiert',]; }
+    if ($currentTemp === null) { return [ 'action' => null, 'reason' => 'keine gültige Temperatur', ]; }
+    if ($currentTemp >= $targetTemp) {
+        return [ 'action' => $isHeating ? 0 : null, 'reason' => "Temperatur erreicht ($currentTemp >= $targetTemp)",]; }
+    if ($stateBatterie < 20) {
+        $hysterese = $hystereseSoll;
+        return [ 'action' => $isHeating ? 0 : null, 'reason' => "Akku unter 20% ($stateBatterie%)",];
+    }
+    if ($isHeating) { return [ 'action' => null, 'reason' => "heizt weiter, Temperatur zu niedrig ($currentTemp < $targetTemp)", ]; }
+    if ($stateBatterie > $hystereseSoll) { return [ 'action' => 1, 'reason' => "Temperatur zu niedrig und Akku über $hystereseSoll% ($stateBatterie%)", ];}
+    if ($hysterese === 0 && $stateBatterie >= 20) {
+        $hysterese = $hystereseSoll;
+        return [ 'action' => 1, 'reason' => "Temperatur zu niedrig, Akku zwischen 20% und $hystereseSoll%, Hysterese startet", ];
+    }
+    return [ 'action' => null, 'reason' => "Hysterese aktiv, warte auf Akku über $hystereseSoll% ($stateBatterie%)",  ];
+}
+
+function getSleepUntilNextInterval(array $heizIntervalle, int $repeat): array
+{
+    $now = new DateTime();
+    $today = $now->format('Y-m-d');
+    $tomorrow = (clone $now)->modify('+1 day')->format('Y-m-d');
+    $nextStart = null;
+    $nextInterval = null;
+
+    foreach ($heizIntervalle as $interval) {
+        if (empty($interval['an']) || empty($interval['aus'])) {
+            continue;
+        }
+
+        $candidate = new DateTime($today . ' ' . $interval['an']);
+        if ($candidate > $now && ($nextStart === null || $candidate < $nextStart)) {
+            $nextStart = $candidate;
+            $nextInterval = $interval;
+        }
+    }
+
+    if ($nextStart === null) {
+        foreach ($heizIntervalle as $interval) {
+            if (empty($interval['an']) || empty($interval['aus'])) {
+                continue;
+            }
+
+            $candidate = new DateTime($tomorrow . ' ' . $interval['an']);
+            if ($nextStart === null || $candidate < $nextStart) {
+                $nextStart = $candidate;
+                $nextInterval = $interval;
+            }
+        }
+    }
+
+    if ($nextStart === null) {
+        return [
+            'seconds' => max(1, $repeat) * 60,
+            'text' => 'kein nächstes Intervall gefunden',
+        ];
+    }
+
+    return [
+        'seconds' => max(1, $nextStart->getTimestamp() - $now->getTimestamp() + 10),
+        'text' => $nextStart->format('d.m.Y H:i') . " bis " . $nextInterval['aus'],
+    ];
+}
+
+
+if (strtolower((string)($argv[1] ?? '')) === 'cloud-test') {
+    $testParamsFile = (string)($argv[2] ?? $paramsFile);
+    if (!is_file($testParamsFile)) {
+        fwrite(STDERR, "Parameterdatei fuer Cloudtest fehlt: $testParamsFile" . PHP_EOL);
+        exit(1);
+    }
+
+    $testParams = json_decode((string)file_get_contents($testParamsFile), true);
+    if (!is_array($testParams)) {
+        fwrite(STDERR, "Parameterdatei fuer Cloudtest ist ungueltig: $testParamsFile" . PHP_EOL);
+        exit(1);
+    }
+
+    configureAmpereIqCloud($testParams);
+    $testValues = getAmpereIqRegulationValues();
+    if (!is_array($testValues)) {
+        fwrite(STDERR, "Ampere.IQ-Cloudtest fehlgeschlagen." . PHP_EOL);
+        exit(1);
+    }
+
+    echo json_encode($testValues, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(0);
+}
+
+$iteration = 0;
+
+while (true) { //endlos Schleife wird mit break abgebrochen
+  $iteration++;
+  //Parameter lesen evtl. Stopp
+  if (file_exists($paramsFile)) {
+        $params = json_decode(file_get_contents($paramsFile), true);
+        if (isset($params['logfile'])&&$params['logfile']!="") {
+            $logfile = $params['logfile'] ?? null;
+            $logfileHandle = null;
+            if ($logfile) {
+                $dir = dirname($logfile);
+                // nur öffnen, wenn Verzeichnis existiert und beschreibbar ist
+                if (is_dir($dir) && is_writable($dir)) {
+                    $logfileHandle = @fopen($logfile, 'a');
+                }
+            } else {
+              $logfile="";
+              unset($logfileHandle);
+            }
+        }
+
+        if (isset($params['stop']) && $params['stop'] === true) {
+            $logger->Info("Task stopped by parameter.");            echo "Task stopped by parameter.";
+            break;
+        }
+        if (isset($params['urlheizStab'])) {
+            $urlheizStab=normalizeBaseUrl((string)$params['urlheizStab']);
+        } 
+        configureAmpereIqCloud($params);
+        configureHeizstabAuth($params);
+        configureHeizstabApi($params);
+        configureHeizstabControl($params);
+
+        if (isset($params['repeat'])) {
+            //writeLog("repeat  alle " . $params['repeat'] . "Min");
+            $repeat=$params['repeat'];
+        }                
+        if (isset($params['Heizintervalle'])) {   //  in die Datenbank zu schreibenden werte
+            $heizIntervalle = $params['Heizintervalle'];
+            //writeLog("heizIntervale gelesen: ");
+        }                
+        if (isset($params['debug'])) {
+            $debug=$params['debug'];
+        }                
+  } else {
+    echo "kein paramsfile $paramsFile\n";
+    exit;
+  }
+
+
+  // zuerst überprüfen, ob schon Boostmodus läuft.
+  date_default_timezone_set('Europe/Berlin');
+  $aktData = getdata();
+  $setupData = getsetup();
+
+  $ctrl = getHeizstabdata('ctrl');   // ansteuerungstyp 1 = http 2 = modbusdTCP s. Doku fußnote 1         
+
+  $Booststat = getHeizstabdata('boostactive');  // musss evtl noch korrigiert werden, wenn http modus eingestellt ist
+  if ($Booststat === false) { $logger->Error("!!! Fehler lesen Heizstab Booststat false"); echo "Fehler lesen Heizstab Booststat false\n"; goto nextIteration;}                                    
+  $getMaxPwr = getHeizstabdata('maxpwr'); 
+  $getAktPwr=getHeizstabdata('power_elwa2');
+  $isHeating = ($Booststat != 0) || ((float)$getAktPwr > 0) || $heizstabDurchRegelungAktiv;
+  if (!$isHeating) {
+    $heizstabDurchRegelungAktiv=false;
+  }
+  $temp1=getHeizstabdata('temp1')/10;
+  $temp2=getHeizstabdata('temp2')/10;
+
+  $cloudValues = getAmpereIqRegulationValues();
+  $cloudValid = is_array($cloudValues);
+  $socValid = $cloudValid;
+  if (!$cloudValid) {
+    $logger->Error("Ampere.IQ-Cloudwerte konnten nicht gelesen werden. Heizstab-Regelung wird sicherheitshalber gesperrt.");
+    $stateBatterie = 'unbekannt';
+    $currentWaterTemp = null;
+    $getMinTemp = 0.0;
+    $wwTemp = '??';
+    $temperatureTimestamp = null;
+  } else {
+    $stateBatterie = (int)round($cloudValues['batterySoc']);
+    $currentWaterTemp = (float)$cloudValues['temperature'];
+    $getMinTemp = (float)$cloudValues['targetTemperature'];
+    $wwTemp = $currentWaterTemp;
+    $temperatureTimestamp = $cloudValues['temperatureTimestamp'];
+  }
+  $currentTime = date('d.m.Y H:i:s');
+  //$logger->Info("currentTime $currentTime");
+  $stateBatterieLog = $socValid ? $stateBatterie . ' %' : 'unbekannt';
+
+  $logger->debugMe("currentTime $currentTime maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C Cloud-Isttemperatur $wwTemp C Cloud-Zieltemperatur $getMinTemp C Batterie $stateBatterieLog");   // soweit wird geheizt
+  // überprüfen ob die akt. Zeit innerhalb des Intervalls ist
+  $pruefeHeizen=0;
+  $cTime = date('H:i');    // zur Intervall Prüfung
+  $cTimeMin = timeToMinutes($cTime);
+  date_default_timezone_set('Europe/Berlin');
+  
+  foreach ($heizIntervalle as $intervallIndex=>$interval) {
+    $intervalAnMin = timeToMinutes($interval['an']);
+    $intervalAusMin = timeToMinutes($interval['aus']);
+    $isWithinInterval = ($cTimeMin >= $intervalAnMin) && ($cTimeMin <= $intervalAusMin);
+    if ($isWithinInterval) {
+      $pruefeHeizen=1;
+//      $logger->Info("Heizung prüfen im intervall [$intervallIndex] ok an: ".$interval['an']." aus: ".$interval['aus']."");
+      break;
+    }
+  }
+  $logger->debugMe("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterieLog currentWaterTemp ".($currentWaterTemp ?? '??'));
+
+  if (!$cloudValid) {
+    $hysterese = $hystereseSoll;
+    $decision = [
+      'action' => $heizstabDurchRegelungAktiv ? 0 : null,
+      'reason' => 'Ampere.IQ-Cloudwerte nicht vollstaendig, Regelung gesperrt'
+    ];
+  } else {
+    $decision = decideHeizstabAction($pruefeHeizen > 0, $isHeating, $currentWaterTemp, (float)$getMinTemp, $stateBatterie, $hysterese, $hystereseSoll );   // hysterwsew auch Rückgbeparameter
+  }
+
+  if ($decision['action'] === 1) {
+    $logger->Info("heizstab einschalten: ".$decision['reason']." SOC=$stateBatterieLog hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
+    if (heizen(1)) { $heizstabDurchRegelungAktiv=true; }
+  } elseif ($decision['action'] === 0) {
+    $logger->Info("heizstab ausschalten: ".$decision['reason']." SOC=$stateBatterieLog hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
+    if (heizen(0)) {
+      $heizstabDurchRegelungAktiv=false;
+    }
+  } else {
+    $logger->debugMe("heizstab unverändert: ".$decision['reason']." SOC=$stateBatterie hysterese=$hysterese temp=".($currentWaterTemp ?? '??')." ziel=$getMinTemp");
+  }
+
+  if ($pruefeHeizen>0 ) { $sleepTime=$repeat*60;  
+  } else { // Ende Untersuchung Heizen
+    $logger->debugMe("currentTime $currentTime Außerhalb Intervall ");
+    if ($isHeating && $heizstabDurchRegelungAktiv) {
+      $logger->Info("heizstab ausschalten: Intervallende und Heizstab wurde durch Regelung eingeschaltet");
+      if (heizen(0)) {
+        $heizstabDurchRegelungAktiv=false;
+      }
+    }
+    $nextSleep = getSleepUntilNextInterval($heizIntervalle, (int)$repeat);
+    $sleepTime = $nextSleep['seconds'];
+    $logger->Info("Nächstes Intervall: ".$nextSleep['text']);
+  }
+  nextIteration:
+  $currentDateTime = new DateTime();
+  $currentDateTime->add(new DateInterval('PT' . $sleepTime . 'S'));
+  $w=$currentDateTime->format('Y-m-d H:i:s');
+  $logger->Info(date('d.m.Y H:i:s')." it: $iteration sleep bis: $w Batt $stateBatterieLog hysterese $hysterese\n");
+  if (isset($logfileHandle)) fclose($logfileHandle);
+  $logfile="";
+  unset($logfileHandle);
+
+  sleep($sleepTime); // Warte Repeat Minuten pro Iteration
+  
+} //ende while
+
+?>
