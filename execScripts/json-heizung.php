@@ -3,23 +3,29 @@
 // check ob geheizt werden soll
 // Schreibt die wesentlichen Werte der Smartbox und des Heizstabes in die Datenbank   (derzeit noch nicht)
 
-// start // php json-heizung.php &
+// start // php json-heizung-regelung.php &
+// sicherer Cloudtest // php json-heizung-regelung.php cloud-test [Parameterdatei]
 // beenden mit ssh ende oder 
 // ps aux | grep json-heizung
 // kill (erste Zahl aus dem ergebnis
 
 require_once __DIR__ . '/Logger.php';
+require_once __DIR__ . '/json-solar-iq-loop.php';
 $debug=true;
 $logf="/home/peter/coh/logs/heizstabserver.log";
 $logger = new Logger();
 $logger->setLogfile ($logf);
 $logger->setDebug($debug);
-$logger->Info("json-heizung startet mit Sicherstellung/Boost ohne ctrl/setup Umschaltung");
+$logger->Info("json-heizung-regelung startet mit Ampere.IQ-Cloudzugriff");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
-$urlIQbox    = 'http://192.168.178.26';
-$paramsFile = '/home/peter/scripts/coh/execScripts/task_heizstab_params.json';   // dateiname der Parameter
-$cookieFile = '/home/peter/scripts/coh/cookies/heizung_iqbox_cookie.txt';        // speichern des auth zugriffs auf d
+$paramsFile = __DIR__ . '/task_heizstab_params.json';   // Parameterdatei neben diesem Script
+$ampereIqCloud = [
+    'enabled'    => true,
+    'paramsFile' => __DIR__ . '/task_solar_params.json',
+    'retries'    => 3,
+    'retryDelay' => 10,
+];
 $heizstabCookieDir = '/home/peter/scripts/coh/cookies';
 $heizstabCookieFile = '';
 $heizstabAuth = [
@@ -55,7 +61,7 @@ $heizstabControl = [
     'boostOnBody'  => 'bststrt=1',
     'boostOffBody' => 'bststrt=0',
 ];
-$logger->Info("Restart json-heizung Logfile $logf paramsFile $paramsFile");
+$logger->Info("Restart json-heizung-regelung Logfile $logf paramsFile $paramsFile");
 
 $logfile="";
 $logfileHandle;
@@ -104,6 +110,87 @@ function sanitizeCookieName(string $value): string
     return trim($value, '_') ?: 'unknown';
 }
 
+function configureAmpereIqCloud(array $params): void
+{
+    global $ampereIqCloud;
+
+    if (!isset($params['ampereIqCloud']) || !is_array($params['ampereIqCloud'])) {
+        return;
+    }
+
+    $cfg = $params['ampereIqCloud'];
+    $ampereIqCloud['enabled'] = !array_key_exists('enabled', $cfg) || !empty($cfg['enabled']);
+    $configuredFile = trim((string)($cfg['paramsFile'] ?? $ampereIqCloud['paramsFile']));
+    if ($configuredFile !== '') {
+        if (!preg_match('~^(?:[A-Za-z]:[\\/]|/)~', $configuredFile)) {
+            $configuredFile = __DIR__ . DIRECTORY_SEPARATOR . ltrim($configuredFile, '/\\');
+        }
+        $ampereIqCloud['paramsFile'] = $configuredFile;
+    }
+    $ampereIqCloud['retries'] = max(1, (int)($cfg['retries'] ?? $ampereIqCloud['retries']));
+    $ampereIqCloud['retryDelay'] = max(0, (int)($cfg['retryDelay'] ?? $ampereIqCloud['retryDelay']));
+}
+
+function getAmpereIqRegulationValues()
+{
+    global $ampereIqCloud, $logger;
+
+    if (empty($ampereIqCloud['enabled'])) {
+        $logger->Error('Ampere.IQ-Cloudzugriff ist deaktiviert');
+        return false;
+    }
+
+    $paramsFile = (string)$ampereIqCloud['paramsFile'];
+    $retries = (int)$ampereIqCloud['retries'];
+    for ($attempt = 1; $attempt <= $retries; $attempt++) {
+        try {
+            $context = createCloudContext($paramsFile);
+            $id = rawurlencode($context['installationId']);
+            $power = apiGet("/api/v1/installation/$id/now/all/power", $context['accessToken']);
+            $heatingRod = loadHeatingRodDevice($context['installationId'], $context['accessToken']);
+            $values = specificationValuesByName($heatingRod['details']);
+
+            $batterySoc = $power['batterySoc'] ?? null;
+            $temperature = $values['temperature'] ?? null;
+            $targetTemperature = $values['targetTemperature'] ?? null;
+            if (!is_numeric($batterySoc) || !is_numeric($temperature) || !is_numeric($targetTemperature)) {
+                throw new RuntimeException(
+                    'Cloudwerte fehlen: batterySoc=' . formatCloudLogValue($batterySoc)
+                    . ', temperature=' . formatCloudLogValue($temperature)
+                    . ', targetTemperature=' . formatCloudLogValue($targetTemperature)
+                );
+            }
+
+            return [
+                'batterySoc' => (float)$batterySoc,
+                'temperature' => (float)$temperature,
+                'targetTemperature' => (float)$targetTemperature,
+                'temperatureTimestamp' => $values['temperatureTimestamp'] ?? null,
+            ];
+        } catch (Throwable $e) {
+            $logger->Error(
+                "Ampere.IQ-Cloudversuch $attempt/$retries fehlgeschlagen: " . $e->getMessage()
+            );
+            if ($attempt < $retries && $ampereIqCloud['retryDelay'] > 0) {
+                sleep((int)$ampereIqCloud['retryDelay']);
+            }
+        }
+    }
+
+    return false;
+}
+
+function formatCloudLogValue($value): string
+{
+    if ($value === null) {
+        return 'null';
+    }
+    if (is_scalar($value)) {
+        return (string)$value;
+    }
+
+    return gettype($value);
+}
 function configureHeizstabAuth(array $params): void
 {
     global $urlheizStab, $heizstabAuth, $heizstabCookieDir, $heizstabCookieFile;
@@ -456,130 +543,6 @@ function heizstabLogin(): bool
     return true;
 }
 
-function ampereLogin(string $urlIQbox): void
-{
-    global $cookieFile,$logger;
-
-    $dir = dirname($cookieFile);
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0770, true);
-    }
-
-// Altes Cookie löschen (WICHTIG)
-    if (file_exists($cookieFile)) {
-        unlink($cookieFile);
-    }
-    $username = "installer";
-    $password = "sfjimorx"; 
-    //writeLog ("ampereLogin urlIQbox $urlIQbox cookieFile $cookieFile");
-    $ch = curl_init($urlIQbox . "/auth/login");
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query([
-            "username" => $username,
-            "password" => $password
-        ]),
-        CURLOPT_COOKIEJAR      => $cookieFile,
-        CURLOPT_COOKIEFILE     => $cookieFile,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_FOLLOWLOCATION => false
-    ]);
-
-    $response = curl_exec($ch);
-
-    if ($response === false) {
-        $logger->Error ("response ampereLogin false urlIQbox $urlIQbox cookieFile $cookieFile");
-        curl_close($ch);
-        throw new RuntimeException("Login failed: " . curl_error($ch));
-    }
-
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if (!in_array($code, [200, 302, 303], true)) {
-        $logger->Error  ("ampereLogin Login HTTP error $code");
-
-        throw new RuntimeException("Login HTTP error $code");
-    }
-    //writeLog ("ampereLogin ok");
-}
-// base url enthält die IQBox/OpenHAB Basis-URL; gelesen wird nur der Item-State als Text.
-function ampereRequest(string $baseUrl, string $path, bool $retry): array
-{
-    global $urlIQbox,$cookieFile,$logger;
-
-    $chUrl=$baseUrl . '/rest/items/' . rawurlencode($path) . '/state';
-    //writeLog ("ampereRequest  chUrl $chUrl cookieFile $cookieFile");
-    $ch = curl_init($chUrl);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_COOKIEJAR      => $cookieFile,
-        CURLOPT_COOKIEFILE     => $cookieFile,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_FOLLOWLOCATION => false,
-        CURLOPT_HTTPHEADER     => ['Accept: text/plain']
-    ]);
-    $response = curl_exec($ch);
-    if ($response === false) {
-        $logger->Error  ("ampereRequest  response false chUrl $chUrl");
-        curl_close($ch);
-        throw new RuntimeException("cURL error: " . curl_error($ch));
-    }
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    // Session ungültig → EINMAL neu einloggen
-    if ($code === 404) {
-        if (!$retry) {
-            $logger->Error("ampereRequest 404, versuche EINMAL neu einzuloggen chUrl $chUrl");
-            @unlink($cookieFile);
-            ampereLogin($baseUrl);
-            return ampereRequest($baseUrl, $path, true);
-        }
-        $logger->Error("ampereRequest nach neuem Login weiter 404 chUrl $chUrl response " . trim((string)$response));
-        throw new RuntimeException("HTTP 404 after login");
-    }
-    if (in_array($code, [301, 302, 303, 401, 403], true)) {
-        $logger->Error  ("ampereRequest  Session ungültig EINMAL neu einloggen chUrl $chUrl code $code");
-        if ($retry) {
-            $logger->Error("ampereRequest Session ungültig zweimal falsch Exception chUrl $chUrl code $code");
-            throw new RuntimeException("Auth failed after retry (HTTP $code)");
-        }
-        ampereLogin($baseUrl);
-        return ampereRequest($baseUrl, $path, true);
-    }
-    if ($code !== 200) {
-        $logger->Error("ampereRequest code nicht 200 Exception chUrl $chUrl code $code response " . trim((string)$response));
-        throw new RuntimeException("HTTP error $code");
-    } 
-    return [
-        "ok"        => true,
-        "http_code" => 200,
-        "data"      => $response
-    ];
-}
-// liefert die jsondaten der iq Box. macht evtl eine reauth
-function ampereGet(string $baseUrl, string $path): array
-{
-    global $logger;
-    //writeLog ("ampereGet  baseUrl $baseUrl path $path");
-    try {
-        $arr=ampereRequest($baseUrl, $path, false);
-        //writeLog (" request ok");
-        return $arr;
-    } catch (Throwable $e) {
-        $logger->Error (" ampereGet request failed baseUrl $baseUrl path $path " . $e->getMessage());
-        return [
-            "ok"        => false,
-            "error"     => true,
-            "http_code" => 500,
-            "message"   => $e->getMessage()
-        ];
-    }
-}
-    
-    
-
 // liest die data.jsn vom Heizstab und gibt sie als Array zurück
 // liefert False bei einem Fehler
 function getdata() {
@@ -677,22 +640,6 @@ function getHeizstabdata ($data) {
 
   return 0;
 }
-/*
- * liest einen Status von der IQbox
- * der name ist der Name aus dem Link
- *
- */
-function getfromIQbox ($path) {
-  global $urlIQbox,$logger;
-    $result = ampereGet($urlIQbox,$path);
-    if ($result['ok']) {
-      return trim((string)$result['data']);
-    } else {
-      $logger->Error("!!! Fehler beim Abrufen der Daten von: $urlIQbox var: $path");
-      return false;
-    }
-}
-
 // CURL-Request Funktion, um Redundanz zu vermeiden
 function curlRequest($url, bool $retryAfterLogin = false)
 {
@@ -945,6 +892,55 @@ function getTargetWaterTemp(): float
 
 /* 
  * entscheidung ob geheizt erden soll
+ * Rückgabewerte
+ * action = 1: Heizstab einschalten
+ * action = 0: Heizstab ausschalten
+ * action = null: Zustand nicht verändern
+ * reason: Begründung für die Entscheidung
+ * Eingabewerte
+ * $isWithinInterval: Liegt die Uhrzeit in einem Heizintervall?
+ * $isHeating: Heizt der Heizstab momentan?
+ * $currentTemp: aktuelle Temperatur aus temperature
+ * $targetTemp: Zieltemperatur aus targetTemperature
+ * $stateBatterie: Akkustand aus batterySoc
+ * $hysterese: aktuelle Wiedereinschaltsperre
+ * $hystereseSoll: Freigabegrenze, derzeit 40 %
+ * Prüfreihenfolge
+ * Akku über 40 %
+ * Bei mehr als 40 % wird die Wiedereinschaltsperre aufgehoben:
+ * $hysterese = 0;
+ * 
+ * Außerhalb des Heizintervalls
+ * Die Funktion ändert nichts:
+ * action = null
+ * Das Ausschalten am Intervallende erfolgt anschließend in der Hauptschleife, aber nur, wenn die Regelung den Heizstab selbst eingeschaltet hatte.
+ * 
+ * Temperatur fehlt
+ * Ohne gültige Isttemperatur wird nichts geschaltet.
+ * 
+ * Zieltemperatur erreicht
+ * Wenn currentTemp >= targetTemp gilt:
+ * Heizstab läuft: action = 0
+ * Heizstab ist bereits aus: action = null
+ * 
+ * Akku unter 20 %
+ * Die Hysterese wird auf 40 gesetzt.
+ * Heizstab läuft: ausschalten
+ * Heizstab ist aus: nichts verändern
+ * 
+ * Heizstab läuft bereits
+ * Wenn die Temperatur noch unter dem Ziel liegt und der Akku mindestens 20 % hat, darf er weiterheizen:
+ * action = null
+ * 
+ * Akku über 40 % und Heizstab aus
+ * Temperatur ist zu niedrig, daher:
+ * action = 1
+ * 
+ * Akku zwischen 20 und 40 %, Hysterese noch frei
+ * Wenn $hysterese === 0, darf einmal eingeschaltet werden. Gleichzeitig wird die Hysterese auf 40 gesetzt.
+ * 
+ * Hysterese aktiv
+ * Der Heizstab bleibt aus, bis der Akku wieder über 40 % steigt.
  */
 
 function decideHeizstabAction( bool $isWithinInterval, bool $isHeating, ?float $currentTemp, float $targetTemp, int $stateBatterie, int &$hysterese, int $hystereseSoll ): array {
@@ -1014,6 +1010,30 @@ function getSleepUntilNextInterval(array $heizIntervalle, int $repeat): array
 }
 
 
+if (strtolower((string)($argv[1] ?? '')) === 'cloud-test') {
+    $testParamsFile = (string)($argv[2] ?? $paramsFile);
+    if (!is_file($testParamsFile)) {
+        fwrite(STDERR, "Parameterdatei fuer Cloudtest fehlt: $testParamsFile" . PHP_EOL);
+        exit(1);
+    }
+
+    $testParams = json_decode((string)file_get_contents($testParamsFile), true);
+    if (!is_array($testParams)) {
+        fwrite(STDERR, "Parameterdatei fuer Cloudtest ist ungueltig: $testParamsFile" . PHP_EOL);
+        exit(1);
+    }
+
+    configureAmpereIqCloud($testParams);
+    $testValues = getAmpereIqRegulationValues();
+    if (!is_array($testValues)) {
+        fwrite(STDERR, "Ampere.IQ-Cloudtest fehlgeschlagen." . PHP_EOL);
+        exit(1);
+    }
+
+    echo json_encode($testValues, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(0);
+}
+
 $iteration = 0;
 
 while (true) { //endlos Schleife wird mit break abgebrochen
@@ -1043,9 +1063,7 @@ while (true) { //endlos Schleife wird mit break abgebrochen
         if (isset($params['urlheizStab'])) {
             $urlheizStab=normalizeBaseUrl((string)$params['urlheizStab']);
         } 
-        if (isset($params['urlIQbox'])) {
-            $urlIQbox=rtrim(normalizeBaseUrl((string)$params['urlIQbox']), '/');
-        }                
+        configureAmpereIqCloud($params);
         configureHeizstabAuth($params);
         configureHeizstabApi($params);
         configureHeizstabControl($params);
@@ -1082,28 +1100,31 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   if (!$isHeating) {
     $heizstabDurchRegelungAktiv=false;
   }
-  $getMinTemp=getTargetWaterTemp();
   $temp1=getHeizstabdata('temp1')/10;
   $temp2=getHeizstabdata('temp2')/10;
-  // Wassertemperatur aus dem Heizstab verwenden.
-  // Das IQBox-Item mypv_acelwa_...actualTemperature liefert bei einigen Anlagen HTTP 400/asBigDecimal.
-  $wwTemp="??";
-  $currentWaterTemp = getCurrentWaterTemp($wwTemp, (float)$temp1);
-  $socRaw = getfromIQbox("sajhybrid_battery_94_HSR2103J2311E08738_battery_stateOfCharge");
-  $socValid = true;
-  if ($socRaw === false || trim((string)$socRaw) === '') {
-    $socValid = false;
-    $logger->Error("SOC der IQbox konnte nicht gelesen werden. Heizstab-Regelung wird sicherheitshalber gesperrt.");
+
+  $cloudValues = getAmpereIqRegulationValues();
+  $cloudValid = is_array($cloudValues);
+  $socValid = $cloudValid;
+  if (!$cloudValid) {
+    $logger->Error("Ampere.IQ-Cloudwerte konnten nicht gelesen werden. Heizstab-Regelung wird sicherheitshalber gesperrt.");
     $stateBatterie = 'unbekannt';
+    $currentWaterTemp = null;
+    $getMinTemp = 0.0;
+    $wwTemp = '??';
+    $temperatureTimestamp = null;
   } else {
-    $SOCArr=explode(" ", (string)$socRaw);
-    $stateBatterie = intval( $SOCArr[0]); // Fuellstand Batterie als int prozentwert
+    $stateBatterie = (int)round($cloudValues['batterySoc']);
+    $currentWaterTemp = (float)$cloudValues['temperature'];
+    $getMinTemp = (float)$cloudValues['targetTemperature'];
+    $wwTemp = $currentWaterTemp;
+    $temperatureTimestamp = $cloudValues['temperatureTimestamp'];
   }
   $currentTime = date('d.m.Y H:i:s');
   //$logger->Info("currentTime $currentTime");
   $stateBatterieLog = $socValid ? $stateBatterie . ' %' : 'unbekannt';
 
-  $logger->debugMe("currentTime $currentTime maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C temp von IQBox $wwTemp C  Batterie $stateBatterieLog");   // soweit wird geheizt
+  $logger->debugMe("currentTime $currentTime maxPower: $getMaxPwr % aktPwr: $getAktPwr W temp min: $getMinTemp C temp1akt: $temp1 C temp2akt: $temp2 C Cloud-Isttemperatur $wwTemp C Cloud-Zieltemperatur $getMinTemp C Batterie $stateBatterieLog");   // soweit wird geheizt
   // überprüfen ob die akt. Zeit innerhalb des Intervalls ist
   $pruefeHeizen=0;
   $cTime = date('H:i');    // zur Intervall Prüfung
@@ -1122,11 +1143,11 @@ while (true) { //endlos Schleife wird mit break abgebrochen
   }
   $logger->debugMe("Intervall $pruefeHeizen Booststat $Booststat hysterese $hysterese Batterie $stateBatterieLog currentWaterTemp ".($currentWaterTemp ?? '??'));
 
-  if (!$socValid) {
+  if (!$cloudValid) {
     $hysterese = $hystereseSoll;
     $decision = [
       'action' => $heizstabDurchRegelungAktiv ? 0 : null,
-      'reason' => 'SOC nicht lesbar, Regelung gesperrt'
+      'reason' => 'Ampere.IQ-Cloudwerte nicht vollstaendig, Regelung gesperrt'
     ];
   } else {
     $decision = decideHeizstabAction($pruefeHeizen > 0, $isHeating, $currentWaterTemp, (float)$getMinTemp, $stateBatterie, $hysterese, $hystereseSoll );   // hysterwsew auch Rückgbeparameter
