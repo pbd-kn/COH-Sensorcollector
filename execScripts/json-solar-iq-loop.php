@@ -1,10 +1,9 @@
 <?php
 
 // Interaktiver Leser fuer dieselbe EKD-Cloud-API wie die Ampere.IQ-App.
-// Beim ersten Aufruf ist einmalig eine Anmeldung erforderlich. Danach wird der
-// Refresh-Token ausserhalb des Projekts im Benutzerverzeichnis gespeichert.
-// Optional automatisiert "password-login" den Auth0-Weblogin mit einer separaten
-// Parameterdatei in execScripts, ohne das Passwort hier zu speichern.
+// Zugangsdaten und automatisch erneuerte Tokens liegen gemeinsam in
+// execScripts/task_solar_params.json. Bei ungueltigen Tokens wird der
+// Auth0-Weblogin einmal automatisch wiederholt.
 
 declare(strict_types=1);
 
@@ -22,11 +21,9 @@ $command = strtolower(trim((string)($argv[1] ?? 'loop')));
 $tokenFile = getTokenFile();
 
 try {
+    migrateLegacyTokens($tokenFile);
     if ($command === 'logout' || $command === 'reset') {
-        if (is_file($tokenFile) && !unlink($tokenFile)) {
-            throw new RuntimeException("Token-Datei konnte nicht geloescht werden: $tokenFile");
-        }
-
+        clearTokens($tokenFile);
         echo "Gespeicherte Ampere.IQ-Anmeldung geloescht." . PHP_EOL;
         exit(0);
     }
@@ -82,9 +79,29 @@ try {
 
 function createCloudContext(string $tokenFile, bool $forceBrowserLogin = false): array
 {
-    $tokens = $forceBrowserLogin ? interactiveLogin($tokenFile) : loadTokens($tokenFile);
-    if ($tokens === null) {
+    if ($forceBrowserLogin) {
         $tokens = interactiveLogin($tokenFile);
+    } else {
+        try {
+            return createCloudContextAttempt($tokenFile, loadTokens($tokenFile));
+        } catch (Throwable $e) {
+            if (!isAuthenticationFailure($e)) {
+                throw $e;
+            }
+
+            echo 'WARNUNG: Ampere.IQ-Anmeldung ist nicht mehr gueltig. Automatischer Login wird versucht.'
+                . PHP_EOL;
+            $tokens = passwordLogin($tokenFile, getLoginFile());
+        }
+    }
+
+    return createCloudContextAttempt($tokenFile, $tokens);
+}
+
+function createCloudContextAttempt(string $tokenFile, ?array $tokens): array
+{
+    if ($tokens === null) {
+        throw new RuntimeException('Keine Ampere.IQ-Tokens gespeichert. Automatischer Login erforderlich.');
     }
 
     $tokens = ensureAccessToken($tokens, $tokenFile);
@@ -120,13 +137,7 @@ function getTokenFile(): string
         return $configured;
     }
 
-    $home = trim((string)(getenv('HOME') ?: getenv('USERPROFILE') ?: ''));
-    if ($home === '') {
-        throw new RuntimeException('HOME/USERPROFILE fehlt. Alternativ AMPERE_IQ_TOKEN_FILE setzen.');
-    }
-
-    return rtrim($home, '/\\') . DIRECTORY_SEPARATOR . '.config' . DIRECTORY_SEPARATOR
-        . 'coh-sensorcollector' . DIRECTORY_SEPARATOR . 'ampere-iq-token.json';
+    return getLoginFile();
 }
 
 function getLoginFile(string $argument = ''): string
@@ -491,6 +502,10 @@ function printCloudHelp(): void
     echo '  day-heatpump [Datum]    nur Waermepumpe' . PHP_EOL;
     echo '  day-wallbox [Datum]     nur Wallbox' . PHP_EOL;
     echo '  day-totals [Datum]   erzeugte, verbrauchte, gespeicherte und Netz-Energie' . PHP_EOL;
+    echo '  heizstab temp             Ist-, Solltemperatur und Messzeit anzeigen' . PHP_EOL;
+    echo '  heizstab values           alle aktuellen Heizstabwerte anzeigen' . PHP_EOL;
+    echo '  heizstab value NAME       genau einen Heizstabwert anzeigen' . PHP_EOL;
+    echo '  heizstab details          vollstaendige Geraeteantwort anzeigen' . PHP_EOL;
     echo '  heatingrod show          Heizstabmodus und Grenzwerte anzeigen' . PHP_EOL;
     echo '  heatingrod mode solar    auf Solarbasiert stellen (mit Bestaetigung)' . PHP_EOL;
     echo '  heatingrod mode manual   auf Nicht optimiert stellen (mit Bestaetigung)' . PHP_EOL;
@@ -502,6 +517,8 @@ function printCloudHelp(): void
     echo '  /api/...      vollstaendigen Cloud-Endpunkt direkt abrufen' . PHP_EOL;
     echo '  login         Browser-Anmeldung erneut ausfuehren' . PHP_EOL;
     echo '  password-login  Login mit execScripts/task_solar_params.json ausfuehren' . PHP_EOL;
+    echo '                Zugangsdaten und erneuerte Tokens werden dort gemeinsam gespeichert' . PHP_EOL;
+    echo '                Bei ungueltigem Token erfolgt automatisch ein Login-Wiederholungsversuch' . PHP_EOL;
     echo '  raw           komplette geladene JSON-Daten als Datei speichern' . PHP_EOL;
     echo '  ?             diese Hilfe anzeigen' . PHP_EOL;
     echo '  q             beenden' . PHP_EOL;
@@ -692,28 +709,48 @@ function printEnergyFlow(array $data): void
 
 function handleHeatingRodCommand(string $input, string $installationId, string $accessToken): bool
 {
-    if (!preg_match(
-        '/^(?:heatingrod|heizstab)(?:\s+(show|mode\s+(?:solar|pv|manual)|min\s+\d+|max\s+\d+))?$/i',
-        trim($input),
-        $matches
-    )) {
+    if (!preg_match('/^(?:heatingrod|heizstab)(?:\s+(.+))?$/i', trim($input), $matches)) {
         return false;
     }
 
-    $action = strtolower(trim((string)($matches[1] ?? 'show')));
+    $action = trim((string)($matches[1] ?? 'show'));
+    $actionLower = strtolower($action);
     $heatingRod = loadHeatingRodDevice($installationId, $accessToken);
-    $settings = heatingRodOptimizationSettings($heatingRod);
-    if ($action === 'show') {
-        printHeatingRodSettings($heatingRod['uuid'], $settings);
+
+    if (in_array($actionLower, ['temp', 'temperature', 'temperatur'], true)) {
+        printHeatingRodTemperatures(specificationValuesByName($heatingRod['details']));
+        return true;
+    }
+    if (in_array($actionLower, ['values', 'value', 'werte'], true)) {
+        printJson(specificationValuesByName($heatingRod['details']));
+        return true;
+    }
+    if (in_array($actionLower, ['details', 'detail', 'raw'], true)) {
+        printJson($heatingRod['details']);
+        return true;
+    }
+    if (preg_match('/^(?:value|wert)\s+([a-z0-9_.-]+)$/i', $action, $valueMatches)) {
+        printHeatingRodValue(specificationValuesByName($heatingRod['details']), $valueMatches[1]);
         return true;
     }
 
-    if (str_starts_with($action, 'mode ')) {
-        $requestedMode = substr($action, 5);
+    $settings = heatingRodOptimizationSettings($heatingRod);
+    if ($actionLower === 'show') {
+        printHeatingRodSettings($heatingRod['uuid'], $settings);
+        return true;
+    }
+    if (!preg_match('/^(?:mode\s+(?:solar|pv|manual)|min\s+\d+|max\s+\d+)$/i', $action)) {
+        throw new RuntimeException(
+            "Unbekannter Heizstab-Befehl '$action'. Erlaubt sind show, temp, values, value NAME, details, mode, min und max."
+        );
+    }
+
+    if (str_starts_with($actionLower, 'mode ')) {
+        $requestedMode = substr($actionLower, 5);
         $field = 'strategy';
         $newValue = in_array($requestedMode, ['solar', 'pv'], true) ? 'pv' : 'manual';
     } else {
-        [$fieldCommand, $number] = explode(' ', $action, 2);
+        [$fieldCommand, $number] = explode(' ', $actionLower, 2);
         $field = $fieldCommand === 'min' ? 'minPower' : 'maxPower';
         $newValue = (int)$number;
         validateHeatingRodPowerSetting($field, $newValue, $settings);
@@ -779,6 +816,50 @@ function loadHeatingRodDevice(string $installationId, string $accessToken): arra
     throw new RuntimeException('In der Ampere.IQ-Installation wurde kein Heizstab gefunden.');
 }
 
+function printHeatingRodTemperatures(array $values): void
+{
+    echo PHP_EOL . 'Heizstab-Temperaturen:' . PHP_EOL;
+    echo str_repeat('=', 72) . PHP_EOL;
+    echo str_pad('Isttemperatur', 28) . ' = ' . formatTemperature($values['temperature'] ?? null) . PHP_EOL;
+    echo str_pad('Solltemperatur', 28) . ' = ' . formatTemperature($values['targetTemperature'] ?? null) . PHP_EOL;
+    echo str_pad('Messzeitpunkt', 28) . ' = ' . ($values['temperatureTimestamp'] ?? 'nicht vorhanden') . PHP_EOL;
+}
+
+function printHeatingRodValue(array $values, string $requestedName): void
+{
+    foreach ($values as $name => $value) {
+        if (strcasecmp($name, $requestedName) === 0) {
+            echo $name . ' = ' . formatScalarValue($value) . PHP_EOL;
+            return;
+        }
+    }
+
+    throw new RuntimeException(
+        "Heizstabwert '$requestedName' wurde nicht gefunden. Mit 'heizstab values' werden alle Namen angezeigt."
+    );
+}
+
+function formatTemperature(mixed $value): string
+{
+    return is_numeric($value) ? number_format((float)$value, 1, ',', '.') . ' Grad C' : 'nicht vorhanden';
+}
+
+function formatScalarValue(mixed $value): string
+{
+    if ($value === null) {
+        return 'null';
+    }
+    if (is_bool($value)) {
+        return $value ? 'true' : 'false';
+    }
+    if (is_scalar($value)) {
+        return (string)$value;
+    }
+
+    $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    return $json === false ? '<nicht darstellbar>' : $json;
+}
+
 function heatingRodOptimizationSettings(array $heatingRod): array
 {
     $details = is_array($heatingRod['details'] ?? null) ? $heatingRod['details'] : [];
@@ -831,7 +912,12 @@ function printHeatingRodSettings(string $uuid, array $settings): void
 
 function printHeatingRodHelp(): void
 {
-    echo PHP_EOL . 'Heizstabsteuerung:' . PHP_EOL;
+    echo PHP_EOL . 'Heizstabwerte und -steuerung:' . PHP_EOL;
+    echo '  heizstab temp      = Isttemperatur, Solltemperatur und Zeitstempel' . PHP_EOL;
+    echo '  heizstab values    = kompakte Gruppe aller aktuellen Werte' . PHP_EOL;
+    echo '  heizstab value temperature       = nur Isttemperatur' . PHP_EOL;
+    echo '  heizstab value targetTemperature = nur Solltemperatur' . PHP_EOL;
+    echo '  heizstab details   = vollstaendige rohe Geraeteantwort' . PHP_EOL;
     echo '  strategy pv       = Solarbasiert; Ampere.IQ regelt nach PV-Ueberschuss' . PHP_EOL;
     echo '  strategy manual   = Nicht optimiert; keine Ueberschussregelung durch Ampere.IQ' . PHP_EOL;
     echo '  minPower          = Mindestueberschuss, 100 bis 3500 W in 100-W-Schritten' . PHP_EOL;
@@ -1106,7 +1192,32 @@ function loadTokens(string $tokenFile): ?array
         throw new RuntimeException("Ungueltige Token-Datei: $tokenFile");
     }
 
-    return $decoded;
+    if (isset($decoded['ampereIq']) && is_array($decoded['ampereIq'])) {
+        $tokens = $decoded['ampereIq']['tokens'] ?? null;
+        return is_array($tokens) ? $tokens : null;
+    }
+
+    return isset($decoded['access_token']) ? $decoded : null;
+}
+
+function isAuthenticationFailure(Throwable $error): bool
+{
+    $message = strtolower($error->getMessage());
+    foreach ([
+        'keine ampere.iq-tokens',
+        'kein refresh-token',
+        'http 400 bei ' . strtolower(AUTH0_BASE_URL) . '/oauth/token',
+        'http 401 ',
+        'http 403 ',
+        'invalid_grant',
+        'invalid refresh token',
+    ] as $needle) {
+        if (str_contains($message, $needle)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function ensureAccessToken(array $tokens, string $tokenFile): array
@@ -1348,11 +1459,82 @@ function saveTokens(string $tokenFile, array $tokens): void
         throw new RuntimeException("Token-Verzeichnis konnte nicht angelegt werden: $directory");
     }
 
-    $json = json_encode($tokens, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    $data = [];
+    if (is_file($tokenFile)) {
+        $existing = json_decode((string)file_get_contents($tokenFile), true);
+        if (is_array($existing)) {
+            $data = $existing;
+        }
+    }
+
+    if (isset($data['ampereIq']) && is_array($data['ampereIq'])) {
+        $data['ampereIq']['tokens'] = $tokens;
+    } elseif ($data !== [] && !isset($data['access_token'])) {
+        $data['ampereIq'] = ['tokens' => $tokens];
+    } else {
+        $data = $tokens;
+    }
+
+    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     if ($json === false || file_put_contents($tokenFile, $json . PHP_EOL, LOCK_EX) === false) {
         throw new RuntimeException("Token-Datei konnte nicht geschrieben werden: $tokenFile");
     }
     @chmod($tokenFile, 0600);
+}
+
+function clearTokens(string $tokenFile): void
+{
+    if (!is_file($tokenFile)) {
+        return;
+    }
+
+    $decoded = json_decode((string)file_get_contents($tokenFile), true);
+    if (!is_array($decoded)) {
+        throw new RuntimeException("Ungueltige Parameterdatei: $tokenFile");
+    }
+
+    if (isset($decoded['ampereIq']) && is_array($decoded['ampereIq'])) {
+        unset($decoded['ampereIq']['tokens']);
+        $json = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if ($json === false || file_put_contents($tokenFile, $json . PHP_EOL, LOCK_EX) === false) {
+            throw new RuntimeException("Parameterdatei konnte nicht geschrieben werden: $tokenFile");
+        }
+        @chmod($tokenFile, 0600);
+        return;
+    }
+
+    if (!unlink($tokenFile)) {
+        throw new RuntimeException("Token-Datei konnte nicht geloescht werden: $tokenFile");
+    }
+}
+
+function migrateLegacyTokens(string $tokenFile): void
+{
+    if (loadTokens($tokenFile) !== null) {
+        return;
+    }
+
+    $home = trim((string)(getenv('HOME') ?: getenv('USERPROFILE') ?: ''));
+    if ($home === '') {
+        return;
+    }
+
+    $legacyFile = rtrim($home, '/\\') . DIRECTORY_SEPARATOR . '.config' . DIRECTORY_SEPARATOR
+        . 'coh-sensorcollector' . DIRECTORY_SEPARATOR . 'ampere-iq-token.json';
+    if ($legacyFile === $tokenFile || !is_file($legacyFile)) {
+        return;
+    }
+
+    $legacyTokens = loadTokens($legacyFile);
+    if ($legacyTokens === null) {
+        return;
+    }
+
+    saveTokens($tokenFile, $legacyTokens);
+    if (!unlink($legacyFile)) {
+        throw new RuntimeException("Alte Token-Datei konnte nach der Migration nicht geloescht werden: $legacyFile");
+    }
+    echo "Vorhandene Ampere.IQ-Tokens wurden nach $tokenFile verschoben." . PHP_EOL;
 }
 
 function jwtExpiresAt(string $token): int
