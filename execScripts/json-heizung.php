@@ -68,7 +68,7 @@ $hystereseSoll=40; // wenn heizen eingeschaltet wird, so muss der füllstand des
 $hysterese=0;      // nach einem einschalten der Heizung wird erst wieder geheizt wenn die Hysterese des Akkus erreicht wird,
 $heizstabDurchRegelungAktiv=false; // nur dann am Intervallende automatisch ausschalten
 $repeat = 15;      // whileSchleife alle 15 Min
-$repeat = 2;      // whileSchleife alle 15 Min
+
 
 function normalizeBaseUrl(string $value, string $defaultScheme = 'http'): string
 {
