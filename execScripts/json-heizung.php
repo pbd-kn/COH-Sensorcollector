@@ -3,20 +3,20 @@
 // check ob geheizt werden soll
 // Schreibt die wesentlichen Werte der Smartbox und des Heizstabes in die Datenbank   (derzeit noch nicht)
 
-// start // php json-heizung-regelung.php &
-// sicherer Cloudtest // php json-heizung-regelung.php cloud-test [Parameterdatei]
+// start // php json-heizung.php &
+// sicherer Cloudtest // php json-heizung.php cloud-test [Parameterdatei]
 // beenden mit ssh ende oder 
 // ps aux | grep json-heizung
 // kill (erste Zahl aus dem ergebnis
 
 require_once __DIR__ . '/Logger.php';
-require_once __DIR__ . '/json-solar-iq-loop.php';
+require_once __DIR__ . '/TaskAccess.php';
 $debug=true;
 $logf="/home/peter/coh/logs/heizstabserver.log";
 $logger = new Logger();
 $logger->setLogfile ($logf);
 $logger->setDebug($debug);
-$logger->Info("json-heizung-regelung startet mit Ampere.IQ-Cloudzugriff");
+$logger->Info("json-heizung startet mit gemeinsamen Energie-Zugriffen");
 // als Globale Daten verwenden
 $urlheizStab='http://192.168.178.46/';
 $paramsFile = __DIR__ . '/task_heizstab_params.json';   // Parameterdatei neben diesem Script
@@ -61,7 +61,7 @@ $heizstabControl = [
     'boostOnBody'  => 'bststrt=1',
     'boostOffBody' => 'bststrt=0',
 ];
-$logger->Info("Restart json-heizung-regelung Logfile $logf paramsFile $paramsFile");
+$logger->Info("Restart json-heizung Logfile $logf paramsFile $paramsFile");
 
 $logfile="";
 $logfileHandle;
@@ -140,44 +140,88 @@ function getAmpereIqRegulationValues()
         return false;
     }
 
-    $paramsFile = (string)$ampereIqCloud['paramsFile'];
-    $retries = (int)$ampereIqCloud['retries'];
-    for ($attempt = 1; $attempt <= $retries; $attempt++) {
-        try {
-            $context = createCloudContext($paramsFile);
-            $id = rawurlencode($context['installationId']);
-            $power = apiGet("/api/v1/installation/$id/now/all/power", $context['accessToken']);
-            $heatingRod = loadHeatingRodDevice($context['installationId'], $context['accessToken']);
-            $values = specificationValuesByName($heatingRod['details']);
+    try {
+        // TaskAccess erledigt nur HTTPS, OAuth, Tokenrefresh und Wiederholungen.
+        // Welche Endpunkte und Werte fuer die Regelung gebraucht werden, bleibt hier im Task.
+        $client = new AmpereIqHttpAccess(
+            (string)$ampereIqCloud['paramsFile'],
+            (int)$ampereIqCloud['retries'],
+            (int)$ampereIqCloud['retryDelay'],
+            TaskAccess::loggerAdapter($logger)
+        );
 
-            $batterySoc = $power['batterySoc'] ?? null;
-            $temperature = $values['temperature'] ?? null;
-            $targetTemperature = $values['targetTemperature'] ?? null;
-            if (!is_numeric($batterySoc) || !is_numeric($temperature) || !is_numeric($targetTemperature)) {
-                throw new RuntimeException(
-                    'Cloudwerte fehlen: batterySoc=' . formatCloudLogValue($batterySoc)
-                    . ', temperature=' . formatCloudLogValue($temperature)
-                    . ', targetTemperature=' . formatCloudLogValue($targetTemperature)
-                );
+        $power = $client->get('/api/v1/installation/{installationId}/now/all/power');
+        $devices = $client->get('/api/v1/installation/{installationId}/hems/device');
+        $heatingRodValues = null;
+
+        foreach ($devices as $device) {
+            if (!is_array($device)) {
+                continue;
+            }
+            $uuid = trim((string)(
+                $device['uuid']
+                ?? $device['installationDeviceUuid']
+                ?? $device['deviceUuid']
+                ?? $device['id']
+                ?? ''
+            ));
+            if ($uuid === '') {
+                continue;
             }
 
-            return [
-                'batterySoc' => (float)$batterySoc,
-                'temperature' => (float)$temperature,
-                'targetTemperature' => (float)$targetTemperature,
-                'temperatureTimestamp' => $values['temperatureTimestamp'] ?? null,
-            ];
-        } catch (Throwable $e) {
-            $logger->Error(
-                "Ampere.IQ-Cloudversuch $attempt/$retries fehlgeschlagen: " . $e->getMessage()
+            $details = $client->get(
+                '/api/v1/installation/{installationId}/hems/device/' . rawurlencode($uuid)
             );
-            if ($attempt < $retries && $ampereIqCloud['retryDelay'] > 0) {
-                sleep((int)$ampereIqCloud['retryDelay']);
+            $type = strtolower(trim((string)(
+                $details['optimizationSettings']['type']
+                ?? $device['optimizationSettings']['type']
+                ?? $details['type']
+                ?? $device['type']
+                ?? $device['deviceType']
+                ?? ''
+            )));
+            if (!in_array($type, ['heatingrod', 'heating_rod', 'heating-rod'], true)) {
+                continue;
             }
-        }
-    }
 
-    return false;
+            $heatingRodValues = [];
+            foreach (($details['specifications'] ?? []) as $specification) {
+                if (!is_array($specification)) {
+                    continue;
+                }
+                $name = trim((string)($specification['name'] ?? ''));
+                if ($name !== '' && array_key_exists('value', $specification)) {
+                    $heatingRodValues[$name] = $specification['value'];
+                }
+            }
+            break;
+        }
+
+        if ($heatingRodValues === null) {
+            throw new RuntimeException('In der Ampere.IQ-Cloud wurde kein Heizstab gefunden.');
+        }
+
+        $batterySoc = $power['batterySoc'] ?? null;
+        $temperature = $heatingRodValues['temperature'] ?? null;
+        $targetTemperature = $heatingRodValues['targetTemperature'] ?? null;
+        if (!is_numeric($batterySoc) || !is_numeric($temperature) || !is_numeric($targetTemperature)) {
+            throw new RuntimeException(
+                'Regelungswerte fehlen: batterySoc=' . formatCloudLogValue($batterySoc)
+                . ', temperature=' . formatCloudLogValue($temperature)
+                . ', targetTemperature=' . formatCloudLogValue($targetTemperature)
+            );
+        }
+
+        return [
+            'batterySoc' => (float)$batterySoc,
+            'temperature' => (float)$temperature,
+            'targetTemperature' => (float)$targetTemperature,
+            'temperatureTimestamp' => $heatingRodValues['temperatureTimestamp'] ?? null,
+        ];
+    } catch (Throwable $e) {
+        $logger->Error('Ampere.IQ-Cloudwerte konnten nicht gelesen werden: ' . $e->getMessage());
+        return false;
+    }
 }
 
 function formatCloudLogValue($value): string
@@ -185,12 +229,9 @@ function formatCloudLogValue($value): string
     if ($value === null) {
         return 'null';
     }
-    if (is_scalar($value)) {
-        return (string)$value;
-    }
-
-    return gettype($value);
+    return is_scalar($value) ? (string)$value : gettype($value);
 }
+
 function configureHeizstabAuth(array $params): void
 {
     global $urlheizStab, $heizstabAuth, $heizstabCookieDir, $heizstabCookieFile;
