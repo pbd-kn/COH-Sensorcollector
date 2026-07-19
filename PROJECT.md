@@ -36,9 +36,10 @@ Der Zugriff erfolgt ueber die Ampere.IQ-Cloud:
 - HTTPS/cURL-Zugriffe mit Wiederholungsversuchen
 - Token und Anmeldedaten in der Parameterdatei, nicht in Umgebungsvariablen
 
-Die gemeinsame technische Zugriffsklasse ist:
+Die Klasse `AmpereIqHttpAccess` befindet sich gemeinsam mit den anderen
+Zugriffsklassen in:
 
-- `execScripts/AmpereIqHttpAccess.php`
+- `execScripts/TaskAccess.php`
 
 Sie enthaelt nur HTTP/cURL, OAuth, Tokenverwaltung und Wiederholungen. Sie
 enthaelt keine Regelungslogik und keine Auswahl einzelner Messwerte.
@@ -90,7 +91,6 @@ Fuer die Heizungsregelung werden mindestens benoetigt:
 
 - `json-heizung.php`
 - `TaskAccess.php`
-- `AmpereIqHttpAccess.php`
 - `Logger.php`
 - `task_heizstab_params.json`
 - `task_solar_params.json`
