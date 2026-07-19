@@ -519,12 +519,12 @@ final class AmpereIqHttpAccess
             ];
         }
 
-        if (preg_match('/^(?:device|geraet)\s+(.+)$/i', $selection, $matches)) {
+        if (preg_match('/^(?:device|devices|geraet|geraete)\s+(.+)$/i', $selection, $matches)) {
             $uuid = trim($matches[1]);
             if ($uuid === '') {
                 throw new InvalidArgumentException('Geraete-UUID fehlt.');
             }
-            return $this->get('/api/v1/installation/{installationId}/hems/device/' . rawurlencode($uuid));
+            return $this->getDeviceByIdentifier($uuid, $endpoints['devices']);
         }
 
         foreach ($endpoints as $name => $endpoint) {
@@ -637,6 +637,57 @@ final class AmpereIqHttpAccess
             $cursor = $cursor[$actualKey];
         }
         return $cursor;
+    }
+
+    /**
+     * Sucht zunaechst in der Geraeteliste. Nicht jede dort angezeigte UUID ist
+     * fuer den Detail-Endpunkt geeignet (z.B. kgUuid einer Batterie). Besitzt
+     * das Geraet eine installationDeviceUuid, werden dessen Details gelesen;
+     * andernfalls wird der vollstaendige Listeneintrag zurueckgegeben.
+     */
+    private function getDeviceByIdentifier(string $identifier, string $devicesEndpoint): array
+    {
+        $devices = $this->get($devicesEndpoint);
+        $identifierFields = ['uuid', 'installationDeviceUuid', 'deviceUuid', 'kgUuid', 'id'];
+
+        foreach ($devices as $device) {
+            if (!is_array($device)) {
+                continue;
+            }
+            $matches = false;
+            foreach ($identifierFields as $field) {
+                if (strcasecmp(trim((string)($device[$field] ?? '')), $identifier) === 0) {
+                    $matches = true;
+                    break;
+                }
+            }
+            if (!$matches) {
+                continue;
+            }
+
+            $detailUuid = trim((string)(
+                $device['installationDeviceUuid']
+                ?? $device['uuid']
+                ?? $device['deviceUuid']
+                ?? ''
+            ));
+            if ($detailUuid === '') {
+                return $device;
+            }
+
+            try {
+                return $this->get(
+                    '/api/v1/installation/{installationId}/hems/device/' . rawurlencode($detailUuid)
+                );
+            } catch (Throwable $error) {
+                // Der Listeneintrag bleibt auch dann nutzbar, wenn dieser
+                // Geraetetyp keinen eigenen Detail-Endpunkt besitzt.
+                $device['_detailError'] = $error->getMessage();
+                return $device;
+            }
+        }
+
+        throw new InvalidArgumentException("Kein Ampere.IQ-Geraet mit Kennung '$identifier' gefunden.");
     }
 
     public function patch(string $path, array $values): array
@@ -1002,9 +1053,12 @@ final class AmpereIqHttpAccess
         curl_close($ch);
         $decoded = json_decode((string)$body, true);
         if ($status < 200 || $status >= 300) {
-            $message = is_array($decoded)
-                ? (string)($decoded['error_description'] ?? $decoded['message'] ?? $decoded['error'] ?? json_encode($decoded))
+            $errorValue = is_array($decoded)
+                ? ($decoded['error_description'] ?? $decoded['message'] ?? $decoded['error'] ?? $decoded)
                 : trim((string)$body);
+            $message = is_scalar($errorValue) || $errorValue === null
+                ? trim((string)$errorValue)
+                : (json_encode($errorValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: 'unbekannter API-Fehler');
             throw new RuntimeException("HTTP $status bei $url" . ($message !== '' ? ": $message" : ''));
         }
         if (trim((string)$body) === '') {

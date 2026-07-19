@@ -42,6 +42,7 @@ soc-history
 battery-settings
 devices
 device DIE-GERAETE-UUID
+devices DIE-GERAETE-UUID
 all
 q
 ```

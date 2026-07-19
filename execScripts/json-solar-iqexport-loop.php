@@ -230,7 +230,8 @@ function printSelectionHelp(array $endpoints): void
     echo '  soc-history          heutiger Batterie-SoC-Verlauf' . PHP_EOL;
     echo '  battery-settings     Batterieeinstellungen' . PHP_EOL;
     echo '  devices              Geraeteliste' . PHP_EOL;
-    echo '  device UUID          Details eines bestimmten Geraets' . PHP_EOL;
+    echo '  device UUID          bestimmtes Geraet anhand einer beliebigen UUID' . PHP_EOL;
+    echo '  devices UUID         gleichbedeutend mit device UUID' . PHP_EOL;
     echo '  all                  alle Bereiche als ein JSON anzeigen' . PHP_EOL;
     echo PHP_EOL . 'Alle Bereichsnamen:' . PHP_EOL;
     foreach (array_keys($endpoints) as $name) {
