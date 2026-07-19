@@ -1,11 +1,11 @@
 {
     "stop":  false,
-    "repeat":  "30",
+    "repeat":  "15",
     "logfile":  "./heizstabserver.log",
     "Heizintervalle":  [
                            {
                                "an":  "12:00",
-                               "aus":  "13:00"
+                               "aus":  "14:00"
                            },
                            {
                                "an":  "16:00",

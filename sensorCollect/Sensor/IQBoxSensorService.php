@@ -9,10 +9,8 @@ use PbdKn\cohSensorcollector\mysql_dialog;
 
 class IQBoxSensorService implements SensorFetcherInterface
 {
-    private string $cookieFile = '/home/peter/scripts/coh/cookies/iqbox_cookie.txt';
-    private string $baseUrl    = 'http://192.168.178.26';
-    private bool $loggedIn     = false;
-    private ?array $items  = null;
+    /** Gemeinsamer Cloud-Client fuer alle Zugriffe dieser Service-Instanz. */
+    private ?\AmpereIqHttpAccess $cloud = null;
 
 
     public function __construct(
@@ -23,11 +21,7 @@ class IQBoxSensorService implements SensorFetcherInterface
 
     public function supports($sensor): bool
     {
-        $res = strtolower($sensor['sensorSource']) === 'iqbox';
-        if ($res) {
-            $this->baseUrl = $sensor['geraeteUrl'];
-        }
-        return $res;
+        return strtolower($sensor['sensorSource']) === 'iqbox';
     }
 
     public function fetch($sensor): ?array
@@ -43,99 +37,6 @@ class IQBoxSensorService implements SensorFetcherInterface
     }
 
     // -------------------------------------------------
-    // LOGIN (nur einmal)
-    // -------------------------------------------------
-    private function ensureLogin(): void
-    {
-        if ($this->loggedIn) return;
-        if (!file_exists($this->cookieFile)) { $this->ampereLogin(); }
-        $this->loggedIn = true;
-    }
-
-    private function ampereLogin(): void
-    {
-        $username = "installer";
-        $password = "sfjimorx";
-        $ch = curl_init($this->baseUrl . "/auth/login");
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-                "username" => $username,
-                "password" => $password
-            ]),
-            CURLOPT_COOKIEJAR      => $this->cookieFile,
-            CURLOPT_COOKIEFILE     => $this->cookieFile,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 10,
-            CURLOPT_FOLLOWLOCATION => false
-        ]);
-        $response = curl_exec($ch);
-        if ($response === false) {
-            $this->logger->Info("Login failed: " . curl_error($ch));
-            throw new \RuntimeException("Login failed: " . curl_error($ch));
-        }
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if (!in_array($code, [200, 302, 303], true)) {
-            $this->logger->Info("Login failed: " . curl_error($ch));
-            throw new \RuntimeException("Login HTTP error $code");
-        }
-        $this->logger->debugMe("ampereLogin Login OK");
-    }
-    // -------------------------------------------------
-    // REQUEST (mit Schutz gegen 503)
-    // -------------------------------------------------
-    private function ampereRequest(?string $path = null, bool $retry = false): array
-    {
-        $this->ensureLogin();
-        usleep(200000); // 200ms Schutz gegen Überlast
-        $requestUrl = $this->baseUrl . "/rest/items" . ($path ? "/" . $path : "");
-        $ch = curl_init($requestUrl);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_COOKIEFILE     => $this->cookieFile,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_HTTPHEADER     => ["Connection: close"]
-        ]);
-        $response = curl_exec($ch);
-        if ($response === false) {
-            throw new \RuntimeException("cURL error: " . curl_error($ch));
-        }
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        // 503 → Retry
-        if ($code === 503 && !$retry) {
-            $this->logger->debugMe("IQBox 503 retry");
-            usleep(500000);
-            return $this->ampereRequest($path, true);
-        }
-        // 👉 NEU: sauberer Abbruch beim zweiten Versuch
-        if ($code === 503 && $retry) {
-            $this->logger->Error("IQBox 503 dauerhaft Abbruch");
-            return [
-                "ok" => false,
-                "data" => "503 Service Unavailable"
-            ];
-        }
-        // Session verloren
-        if (in_array($code, [401, 403], true) && !$retry) {
-            $this->logger->debugMe("Session verloren Login neu");
-            $this->loggedIn = false;
-            $this->ampereLogin();
-            return $this->ampereRequest($path, true);
-        }
-        if ($code !== 200) {
-            if ($code === 404) {
-                $this->logger->Error("IQBox REST-Endpunkt nicht gefunden HTTP 404 URL $requestUrl");
-            } else {
-                $this->logger->Error("IQBox HTTP Fehler $code URL $requestUrl");
-            }
-            return ["ok" => false];
-        }
-        return ["ok" => true, "data" => $response];
-    }
-    // -------------------------------------------------
     // HAUPTLOGIK
     // -------------------------------------------------
     public function fetchArr(array $sensors): ?array
@@ -146,35 +47,36 @@ class IQBoxSensorService implements SensorFetcherInterface
 
         try {
             if (count($sensors) === 0) return null;
-            $url = $sensors[0]['geraeteUrl'];
-            if ($url && !str_starts_with($url, 'http')) {
-                $url = 'http://' . $url;
-            }
-            $this->baseUrl = $url;
-            try {
-                $this->items = $this->getDataFromDevice();
-            } catch (\Throwable $e) {
-                $this->logger->Error("IQBox Fehler: fehler beim lesen gettall" . $e->getMessage());
-            }
-            if (!is_array($this->items)) {
-                $this->logger->Error("IQBox REST /rest/items nicht verfuegbar. Sensorwerte werden in diesem Lauf nicht gelesen.");
-                return [];
-            }
+            $cloud = $this->cloud();
             foreach ($sensors as $sensor) {
-                $sensorLokalId = !empty($sensor['sensorLokalId']) ? $sensor['sensorLokalId'] : $sensor['sensorID'];
+                $sensorLokalId = trim((string)($sensor['sensorLokalId'] ?? ''));
                 $outputMode=$sensor['outputMode'];
                 $sensorID=$sensor['sensorID'];
+                $einheit = trim((string)($sensor['sensorEinheit'] ?? ''));
 
-                $this->logger->debugMe("name: $sensorLokalId value $value einheit $einheit ");
-                $rrArr = [];
-                if (isset($this->items[$sensorLokalId])) {
-                    $rrArr = $this->IQStatreal($this->items[$sensorLokalId],$sensorLokalId, $sensorID, $outputMode);
-                    $value = $rrArr['wert'];
-                    $einheit = $rrArr['einheit'];
-                } 
-                else {
-                    $this->logger->Error("fetchArr this->items[$sensorLokalId] existiert nicht in items");
+                if ($sensorLokalId === '') {
+                    $this->logger->Error("IQBox Cloud: sensorLokalId fehlt fuer Sensor $sensorID");
                     continue;
+                }
+
+                try {
+                    // Die Antwort wird absichtlich nicht gecacht: jeder Sensorwert
+                    // wird frisch gelesen, aber immer ueber denselben Cloud-Client.
+                    $cloudValue = $cloud->getValue($sensorLokalId);
+                } catch (\Throwable $e) {
+                    $this->logger->Error("IQBox Cloud: Fehler bei $sensorLokalId: " . $e->getMessage());
+                    continue;
+                }
+
+                if (is_array($cloudValue) || is_object($cloudValue)) {
+                    $value = json_encode($cloudValue, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                    if ($value === false) {
+                        $this->logger->Error("IQBox Cloud: JSON fuer $sensorLokalId konnte nicht erzeugt werden");
+                        continue;
+                    }
+                } else {
+                    $rrArr = $this->IQStatreal($cloudValue, $sensorLokalId, $sensorID, $outputMode);
+                    $value = $rrArr['wert'];
                 }
                 $this->logger->debugMe("Result 1: value $value einheit $einheit " . "sensorID " . $sensor['sensorID'] . " name $sensorLokalId ");
                 $res[$sensor['sensorID']] = [
@@ -195,43 +97,25 @@ class IQBoxSensorService implements SensorFetcherInterface
             return null;
         }
     }
-    // -------------------------------------------------
-    // TEST: ALLE ITEMS IN EINEM REQUEST HOLEN
-    // -------------------------------------------------
-    private function getDataFromDevice() : ?array {
-        try {
-            $result = $this->ampereRequest(); // 🔥 kein eigener curl mehr
-            if (!$result['ok']) { $this->logger->Error("getDataFromDevice Fehler"); return null;
+
+    private function cloud(): \AmpereIqHttpAccess
+    {
+        if ($this->cloud !== null) {
+            return $this->cloud;
         }
-        $data = json_decode($result['data'], true);
-        if (!is_array($data)) { $this->logger->Error("getDataFromDevice JSON Fehler"); return null; }
-        // falls {items:[...]}
-        if (isset($data['items'])) { $data = $data['items']; }
-        $items = [];
-        foreach ($data as $item) {
-            if (!is_array($item)) {
-                $this->logger->debugMe("getDataFromDevice : no array $item");
-                continue;
-            }
-            $name  = $item['name']  ?? null;
-            $state = $item['state'] ?? null;
-            if (!$name) { 
-                $this->logger->debugMe("getDataFromDevice : no name");
-                continue;
-            }
-            $items[$name] = ($state === null || $state === 'NULL' || $state === 'UNDEF') ? '' : $state;
-            $this->logger->debugMe("getDataFromDevice : set $name state ".$items[$name]);
-            if (($state === null || $state === 'NULL' || $state === 'UNDEF') ) {
-                $this->logger->debugMe("!! IQ item $name raw Wert state=" . var_export($state, true));            
-            }
-        }
-        $this->logger->debugMe("getDataFromDevice OK: " . count($items));
-        return $items;
-        } catch (\Throwable $e) {
-            $this->logger->Error("getDataFromDevice Exception: " . $e->getMessage());
-            return null;
-        }
-    }    
+
+        $execScriptsDir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'execScripts';
+        require_once $execScriptsDir . DIRECTORY_SEPARATOR . 'TaskAccess.php';
+
+        $this->cloud = new \AmpereIqHttpAccess(
+            $execScriptsDir . DIRECTORY_SEPARATOR . 'task_solar_params.json',
+            3,                  // anzahl Versuche
+            10,                 // wartezeit zwischen den Verwsuchn
+            \TaskAccess::loggerAdapter($this->logger)   //logger übergabe
+        );
+
+        return $this->cloud;
+    }
     // -------------------------------------------------
     // TRANSFORMS
     // -------------------------------------------------
@@ -287,7 +171,7 @@ $this->logger->debugMe("IQbox getValueFromStartday sql $sqlFirst");
         // -----------------------------------
         // 1. Wert extrahieren
         // -----------------------------------
-        $valarr = explode("|", $stat ?? '');
+        $valarr = explode("|", (string)($stat ?? ''));
         $strWert = count($valarr) > 1 ? $valarr[1] : $stat;
         // -----------------------------------
         // 2. Wert + Einheit parsen (inkl. E+9)
