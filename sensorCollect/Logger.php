@@ -16,6 +16,8 @@ class Logger
 {
     private string $logfile ="";
     private bool $debug = false;
+    private ?bool $debugOverride = null;
+    private bool $debugToConsole = false;
     private $logfileHandle = null;
     // Variablen für späte Initialisierung
     private static ?Logger $instance = null;
@@ -54,6 +56,18 @@ class Logger
         $this->debug = $debug;
     }
 
+    /** Erzwingt den Debug-Status, z. B. im interaktiven Konsolenmodus. */
+    public function setDebugOverride(?bool $debug): void
+    {
+        $this->debugOverride = $debug;
+    }
+
+    /** Gibt Debugmeldungen zusaetzlich im Terminal aus. */
+    public function setDebugToConsole(bool $enabled): void
+    {
+        $this->debugToConsole = $enabled;
+    }
+
     public static function getInstance(?string $dateiname = null, bool $debug = false): Logger
     {
         if (self::$instance === null) {
@@ -65,11 +79,13 @@ class Logger
     
     public function debugMe(string $txt): void
     {
-        if ($this->debug) {
+        if ($this->isDebug()) {
+            $message = $this->addDebugInfoToText("debugMe: ".$txt);
             if ($this->logfileHandle) {
-                fwrite($this->logfileHandle, $this->addDebugInfoToText("debugMe: ".$txt));
-            } else {
-                echo $this->addDebugInfoToText("debugMe: ".$txt);
+                fwrite($this->logfileHandle, $message);
+            }
+            if (!$this->logfileHandle || $this->debugToConsole) {
+                echo $message;
             }
         }
     }
@@ -94,7 +110,7 @@ class Logger
     }
     public function isDebug(): bool
     {
-        return $this->debug;
+        return $this->debugOverride ?? $this->debug;
     }
     
     /* füege modul funktion und zeile dazu

@@ -15,6 +15,15 @@ class SensorManager
     }
     public function fetchAll(): array
     {
+        return $this->fetchSensors([], true);
+    }
+
+    /**
+     * Verarbeitet nur die angegebenen sensorIDs bzw. Sensornamen.
+     * Bei leerer Auswahl werden alle Sensoren verarbeitet.
+     */
+    public function fetchSensors(array $selection = [], bool $updateHistoryCounters = false): array
+    {
         $pollTime=$this->SensorParameter->getpollTime();  // Minuten
         $this->logger->debugMe( "Fetcher polltime $pollTime");
 
@@ -27,16 +36,24 @@ class SensorManager
         $res=$this->db->query($sql);
         $sensors = [];
         while ($row = $res->fetch_assoc()) {
+            if (!$this->isSelected($row, $selection)) {
+                continue;
+            }
             $sensors[] = $row;
         }        
     
         $allData = [];
+        $manualSelection = $selection !== [];
         $this->logger->debugMe( "anz fetchers ".count($this->fetchers));
         foreach ($this->fetchers as $fetcher) {
             $supported = [];
 
             foreach ($sensors as $sensor) {               // speichere die sensorenpro fetcher
                 if ($fetcher->supports($sensor)) {
+                    if ($manualSelection) {
+                        $supported[] = $sensor;
+                        continue;
+                    }
                     if ($sensor['isHistory'] === '1') {
                         $sensorID = $sensor['sensorID'];
                         $history=$sensor['history'];     // kennzeichnung wie oft gepollt wird bei history = 1 muss gepollt werden historycount nicht berücksichtigen
@@ -66,6 +83,9 @@ class SensorManager
                             $supported[] = $sensor; 
                             //$this->logger->Info( "History neu gesetzt isHistory "  . " sensorID " . $sensor['sensorID'] ." isHistory " . $sensor['isHistory']  . " history " . $sensor['history'] . " historycount(DB) " . $sensor['historycount'] . " maxcount $maxcount text $text");
                         }
+                        if (!$updateHistoryCounters) {
+                            continue;
+                        }
                         $sql = "
                                 UPDATE tl_coh_sensors
                                     SET historyCount = ?
@@ -87,7 +107,7 @@ class SensorManager
                 }
             }            
             if (!empty($supported)) {
-                $this->logger->debugMe( "Fetcher " . get_class($fetcher) . " verarbeitet " . count($supported) . " Sensoren");
+                $this->logger->Info( "Fetcher " . get_class($fetcher) . " verarbeitet " . count($supported) . " Sensoren");
                 $data = $fetcher->fetchArr($supported); // <- Jetzt wird ein Array übergeben
                 if (is_array($data)) {
                     $allData = array_merge($allData, $data);
@@ -97,6 +117,72 @@ class SensorManager
             }
         }
         return $allData;
+    }
+
+    /**
+     * Liefert die konfigurierten Sensoren fuer die Konsolen-Auswahl.
+     * Die Quelle kann vollstaendig oder als Teiltext angegeben werden.
+     */
+    public function getSensorOverview(?string $source = null): array
+    {
+        $sql = "SELECT sensor.sensorID, sensor.sensorTitle, sensor.sensorSource
+                  FROM tl_coh_sensors AS sensor
+              ORDER BY sensor.sensorSource, sensor.sensorTitle, sensor.sensorID";
+        $res = $this->db->query($sql);
+        if (!$res) {
+            throw new \RuntimeException('Sensorliste konnte nicht gelesen werden: ' . $this->db->error);
+        }
+
+        $source = $source !== null ? strtolower(trim($source)) : null;
+        $sensors = [];
+        while ($row = $res->fetch_assoc()) {
+            $sourceId = trim((string) ($row['sensorSource'] ?? ''));
+            if ($source !== null && $source !== ''
+                && strpos(strtolower($sourceId), $source) === false) {
+                continue;
+            }
+            $sensors[] = [
+                'sensorID' => (string) ($row['sensorID'] ?? ''),
+                'sensorTitle' => (string) ($row['sensorTitle'] ?? ''),
+                'source' => $sourceId,
+            ];
+        }
+        $res->free();
+        return $sensors;
+    }
+
+    /** Liefert die vollstaendige Sensor-Konfiguration ohne verknuepfte Geraetedaten. */
+    public function getSensorDetails(array $selection): array
+    {
+        $res = $this->db->query("SELECT * FROM tl_coh_sensors ORDER BY sensorSource, sensorTitle, sensorID");
+        if (!$res) {
+            throw new \RuntimeException('Sensordetails konnten nicht gelesen werden: ' . $this->db->error);
+        }
+
+        $details = [];
+        while ($sensor = $res->fetch_assoc()) {
+            if (!$this->isSelected($sensor, $selection)) {
+                continue;
+            }
+            $details[(string) ($sensor['sensorID'] ?? count($details))] = $sensor;
+        }
+        $res->free();
+        return $details;
+    }
+
+    private function isSelected(array $sensor, array $selection): bool
+    {
+        if ($selection === []) {
+            return true;
+        }
+
+        $wanted = array_map(static fn ($value): string => strtolower(trim((string) $value)), $selection);
+        $candidates = [
+            strtolower(trim((string) ($sensor['sensorID'] ?? ''))),
+            strtolower(trim((string) ($sensor['sensorTitle'] ?? ''))),
+        ];
+
+        return array_intersect($wanted, $candidates) !== [];
     }
 }
 ?>

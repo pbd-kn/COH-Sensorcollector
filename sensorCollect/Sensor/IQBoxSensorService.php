@@ -41,8 +41,6 @@ class IQBoxSensorService implements SensorFetcherInterface
     // -------------------------------------------------
     public function fetchArr(array $sensors): ?array
     {
-        $debug=false;
-        $this->logger->setDebug($debug);
         $res = [];
 
         try {
@@ -87,13 +85,10 @@ class IQBoxSensorService implements SensorFetcherInterface
                     'sensorSource'    => $sensor['sensorSource'],
                 ];
             }
-            if ($debug) $this->logger->setDebug(false);
 
             return $res;
         } catch (\Throwable $e) {
             $this->logger->Error("IQBox Fehler: " . $e->getMessage());
-                        if ($debug) $this->logger->setDebug(false);
-
             return null;
         }
     }

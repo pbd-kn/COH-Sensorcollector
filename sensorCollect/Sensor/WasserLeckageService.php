@@ -33,9 +33,6 @@ class WasserLeckageService implements SensorFetcherInterface
     }
     public function fetchArr(array $sensors): ?array // neue Methode
     { 
-        $debugval=false;
-        $this->logger->setDebug($debugval);
-
         $res=[];
         try {
             if (count($sensors) > 0) {
@@ -53,7 +50,6 @@ class WasserLeckageService implements SensorFetcherInterface
                 ], ['id' => $sensor['id']);
 */
                 $this->logger->Error( $message);
-if ($debugval) $this->logger->setDebug(false);
                 return null;
             }
             $this->dataFromDevice=$this->getDataFromDevice($url,"all");
@@ -116,12 +112,10 @@ if ($debugval) $this->logger->setDebug(false);
 */
                 }
             }
-            if ($debugval) $this->logger->setDebug(false);
                 return $res;
         } catch (\Throwable $e) {
             $message = "WasserLeckage: Fehler bei : " . $e->getMessage();
             $this->logger->Info( $message); 
-if ($debugval) $this->logger->setDebug(false);   
 /*
             $this->connection->update('tl_coh_sensors', [
                 'lastError' => $e->getMessage()
@@ -129,7 +123,6 @@ if ($debugval) $this->logger->setDebug(false);
 */
             return null;
         }
-if ($debugval) $this->logger->setDebug(false);
         return $res;
     }
     private function getDataFromDevice(string $url,$cmd): ?array { 

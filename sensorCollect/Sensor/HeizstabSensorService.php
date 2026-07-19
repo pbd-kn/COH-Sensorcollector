@@ -34,8 +34,6 @@ class HeizstabSensorService implements SensorFetcherInterface
 
     public function fetchArr(array $sensors): ?array
     {
-        $debugval = false;
-        $this->logger->setDebug($debugval);
         $this->logger->debugMe('HeizstabSensorService fetchArr len ' . count($sensors));
         $res = [];
 
@@ -48,17 +46,11 @@ class HeizstabSensorService implements SensorFetcherInterface
 
             if ($access === '') {
                 $this->logger->Error('Heizstab: geraeteUrl fehlt. Erwartet wird IP/Hostname oder serialnummer:APIKey');
-                if ($debugval) {
-                    $this->logger->setDebug(false);
-                }
                 return null;
             }
 
             if ($this->getDataFromDevice($access) === null) {
                 $this->logger->Error('getDataFromDevice null');
-                if ($debugval) {
-                    $this->logger->setDebug(false);
-                }
                 return null;
             }
 
@@ -97,9 +89,6 @@ class HeizstabSensorService implements SensorFetcherInterface
                 ];
             }
 
-            if ($debugval) {
-                $this->logger->setDebug(false);
-            }
             return $res;
         } catch (\Throwable $e) {
             $this->logger->debugMe('Heizstab: Fehler bei : ' . $e->getMessage());

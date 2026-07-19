@@ -161,9 +161,6 @@ class TasmotaSensorService implements SensorFetcherInterface
     }
     private function getDataFromDevice(string $url) { 
 
-        $debug=false;
-        $this->logger->setDebug($debug);
-
         try {
             $url = $url.'/cm?cmnd=Status%2010';    //Request um die daten zu holen 
             $data = $this->httpClient->getJson($url);
@@ -196,9 +193,8 @@ class TasmotaSensorService implements SensorFetcherInterface
             }            
         } catch (\Throwable $e) {
             $this->logger->debugMe("Tasmota: Fehler bei getDataFromDevice : " . $e->getMessage());
-            if ($debug) $this->logger->setDebug(false);            return null;
+            return null;
         }
-        if ($debug) $this->logger->setDebug(false);
         return $this->dataFromDevice=$data;
         
     }
