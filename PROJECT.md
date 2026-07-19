@@ -2,6 +2,16 @@
 
 Stand: 18.07.2026
 
+## Ampere.IQ-Werteexport fuer andere Anwendungen
+
+Der eigenstaendige, rein lesende Exporter `execScripts/json-solar-iqexport-loop.php`
+schreibt alle bekannten App-Werte in eine JSON-Datei. Wichtige Werte wie
+`batterySoc` stehen dort direkt unter `aliases`; alle Einzelwerte sind zusaetzlich
+unter `values` ueber eindeutige Pfade erreichbar. Details und Beispiele stehen
+in `execScripts/json-solar-iqexport-loop.md`. Ohne Optionen startet der Exporter eine
+interaktive Schleife, in der einzelne Bereiche ausgewaehlt und unmittelbar als
+JSON angezeigt werden. Mit `--all` wird weiterhin die Gesamtdatei erzeugt.
+
 ## Heizungsregelung
 
 Die aktive Regelung befindet sich in:
@@ -112,4 +122,3 @@ Dabei funktionierten:
   `json-heizung.php`
 - my-PV-Cloudzugriff
 - lokaler HTTPS-Zugriff auf den Heizstab
-

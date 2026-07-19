@@ -1,0 +1,914 @@
+{
+    "ok": true,
+    "schemaVersion": 1,
+    "installationId": "84f2b68e-358a-411e-a42f-2adb35b000ea",
+    "generatedAt": "2026-07-19T07:56:07+00:00",
+    "aliases": {
+        "batterySoc": 95,
+        "batteryPower": -300,
+        "gridPower": 0,
+        "pvPower": 600
+    },
+    "values": {
+        "live.pvPower": 600,
+        "live.housePower": -300,
+        "live.gridPower": 0,
+        "live.batteryPower": -300,
+        "live.heatingRodPower": 0,
+        "live.batterySoc": 95,
+        "today.work.generation": 3283.72,
+        "today.work.consumption": 2443.58,
+        "today.work.batteryFeed": 2134.82,
+        "today.work.batteryDraw": 1363.36,
+        "today.work.gridFeed": 145.5951388888061,
+        "today.work.gridDraw": 56.378472222189885,
+        "today.selfSufficiency.value": 97.69,
+        "today.selfConsumption.value": 98.09,
+        "today.saving.energy.pvProduction": 3283.72,
+        "today.saving.energy.gridFeed": 145.6,
+        "today.saving.energy.ownConsumption": 3138.12,
+        "today.saving.cost.ownConsumption": 163.18223999999998,
+        "today.saving.cost.gridFeedCompensation": 1.1648,
+        "today.saving.cost.total": 164.34704,
+        "today.saving.cost.gridFeedCompensationPrice.value": 8,
+        "today.saving.cost.gridFeedCompensationPrice.isDefault": false,
+        "today.saving.cost.electricityPrices.0.price": 52,
+        "today.saving.cost.electricityPrices.0.from": "2026-07-18T22:00:00.000Z",
+        "today.saving.cost.electricityPrices.0.to": "2026-07-19T21:59:59.999Z",
+        "today.saving.cost.electricityPrices.0.isDefault": false,
+        "today.saving.evs.0.distance": 16.418599999999998,
+        "today.saving.evs.0.imageUrl": null,
+        "today.saving.evs.0.customName": null,
+        "today.saving.evs.0.name": null,
+        "today.saving.evs.0.hemsEvUuid": null,
+        "today.saving.evs.0.consumption": 200,
+        "today.saving.emissions.gramPerWh": 0.346,
+        "today.saving.emissions.total": 9.490520231213873,
+        "history.batterySoc.total": null,
+        "history.batterySoc.timeline.0.value": 87.39,
+        "history.batterySoc.timeline.0.fromTimestamp": "2026-07-18T22:00:00.000Z",
+        "history.batterySoc.timeline.0.toTimestamp": "2026-07-18T22:15:00.000Z",
+        "history.batterySoc.timeline.1.value": 86.54,
+        "history.batterySoc.timeline.1.fromTimestamp": "2026-07-18T22:15:00.000Z",
+        "history.batterySoc.timeline.1.toTimestamp": "2026-07-18T22:30:00.000Z",
+        "history.batterySoc.timeline.2.value": 85.82,
+        "history.batterySoc.timeline.2.fromTimestamp": "2026-07-18T22:30:00.000Z",
+        "history.batterySoc.timeline.2.toTimestamp": "2026-07-18T22:45:00.000Z",
+        "history.batterySoc.timeline.3.value": 85.14,
+        "history.batterySoc.timeline.3.fromTimestamp": "2026-07-18T22:45:00.000Z",
+        "history.batterySoc.timeline.3.toTimestamp": "2026-07-18T23:00:00.000Z",
+        "history.batterySoc.timeline.4.value": 84.51,
+        "history.batterySoc.timeline.4.fromTimestamp": "2026-07-18T23:00:00.000Z",
+        "history.batterySoc.timeline.4.toTimestamp": "2026-07-18T23:15:00.000Z",
+        "history.batterySoc.timeline.5.value": 83.82,
+        "history.batterySoc.timeline.5.fromTimestamp": "2026-07-18T23:15:00.000Z",
+        "history.batterySoc.timeline.5.toTimestamp": "2026-07-18T23:30:00.000Z",
+        "history.batterySoc.timeline.6.value": 83.16,
+        "history.batterySoc.timeline.6.fromTimestamp": "2026-07-18T23:30:00.000Z",
+        "history.batterySoc.timeline.6.toTimestamp": "2026-07-18T23:45:00.000Z",
+        "history.batterySoc.timeline.7.value": 82.49,
+        "history.batterySoc.timeline.7.fromTimestamp": "2026-07-18T23:45:00.000Z",
+        "history.batterySoc.timeline.7.toTimestamp": "2026-07-19T00:00:00.000Z",
+        "history.batterySoc.timeline.8.value": 81.95,
+        "history.batterySoc.timeline.8.fromTimestamp": "2026-07-19T00:00:00.000Z",
+        "history.batterySoc.timeline.8.toTimestamp": "2026-07-19T00:15:00.000Z",
+        "history.batterySoc.timeline.9.value": 81.45,
+        "history.batterySoc.timeline.9.fromTimestamp": "2026-07-19T00:15:00.000Z",
+        "history.batterySoc.timeline.9.toTimestamp": "2026-07-19T00:30:00.000Z",
+        "history.batterySoc.timeline.10.value": 81.01,
+        "history.batterySoc.timeline.10.fromTimestamp": "2026-07-19T00:30:00.000Z",
+        "history.batterySoc.timeline.10.toTimestamp": "2026-07-19T00:45:00.000Z",
+        "history.batterySoc.timeline.11.value": 80.47,
+        "history.batterySoc.timeline.11.fromTimestamp": "2026-07-19T00:45:00.000Z",
+        "history.batterySoc.timeline.11.toTimestamp": "2026-07-19T01:00:00.000Z",
+        "history.batterySoc.timeline.12.value": 79.99,
+        "history.batterySoc.timeline.12.fromTimestamp": "2026-07-19T01:00:00.000Z",
+        "history.batterySoc.timeline.12.toTimestamp": "2026-07-19T01:15:00.000Z",
+        "history.batterySoc.timeline.13.value": 79.36,
+        "history.batterySoc.timeline.13.fromTimestamp": "2026-07-19T01:15:00.000Z",
+        "history.batterySoc.timeline.13.toTimestamp": "2026-07-19T01:30:00.000Z",
+        "history.batterySoc.timeline.14.value": 78.75,
+        "history.batterySoc.timeline.14.fromTimestamp": "2026-07-19T01:30:00.000Z",
+        "history.batterySoc.timeline.14.toTimestamp": "2026-07-19T01:45:00.000Z",
+        "history.batterySoc.timeline.15.value": 78.11,
+        "history.batterySoc.timeline.15.fromTimestamp": "2026-07-19T01:45:00.000Z",
+        "history.batterySoc.timeline.15.toTimestamp": "2026-07-19T02:00:00.000Z",
+        "history.batterySoc.timeline.16.value": 77.65,
+        "history.batterySoc.timeline.16.fromTimestamp": "2026-07-19T02:00:00.000Z",
+        "history.batterySoc.timeline.16.toTimestamp": "2026-07-19T02:15:00.000Z",
+        "history.batterySoc.timeline.17.value": 77.13,
+        "history.batterySoc.timeline.17.fromTimestamp": "2026-07-19T02:15:00.000Z",
+        "history.batterySoc.timeline.17.toTimestamp": "2026-07-19T02:30:00.000Z",
+        "history.batterySoc.timeline.18.value": 76.74,
+        "history.batterySoc.timeline.18.fromTimestamp": "2026-07-19T02:30:00.000Z",
+        "history.batterySoc.timeline.18.toTimestamp": "2026-07-19T02:45:00.000Z",
+        "history.batterySoc.timeline.19.value": 76.26,
+        "history.batterySoc.timeline.19.fromTimestamp": "2026-07-19T02:45:00.000Z",
+        "history.batterySoc.timeline.19.toTimestamp": "2026-07-19T03:00:00.000Z",
+        "history.batterySoc.timeline.20.value": 75.81,
+        "history.batterySoc.timeline.20.fromTimestamp": "2026-07-19T03:00:00.000Z",
+        "history.batterySoc.timeline.20.toTimestamp": "2026-07-19T03:15:00.000Z",
+        "history.batterySoc.timeline.21.value": 75.2,
+        "history.batterySoc.timeline.21.fromTimestamp": "2026-07-19T03:15:00.000Z",
+        "history.batterySoc.timeline.21.toTimestamp": "2026-07-19T03:30:00.000Z",
+        "history.batterySoc.timeline.22.value": 74.55,
+        "history.batterySoc.timeline.22.fromTimestamp": "2026-07-19T03:30:00.000Z",
+        "history.batterySoc.timeline.22.toTimestamp": "2026-07-19T03:45:00.000Z",
+        "history.batterySoc.timeline.23.value": 73.97,
+        "history.batterySoc.timeline.23.fromTimestamp": "2026-07-19T03:45:00.000Z",
+        "history.batterySoc.timeline.23.toTimestamp": "2026-07-19T04:00:00.000Z",
+        "history.batterySoc.timeline.24.value": 73.72,
+        "history.batterySoc.timeline.24.fromTimestamp": "2026-07-19T04:00:00.000Z",
+        "history.batterySoc.timeline.24.toTimestamp": "2026-07-19T04:15:00.000Z",
+        "history.batterySoc.timeline.25.value": 73.79,
+        "history.batterySoc.timeline.25.fromTimestamp": "2026-07-19T04:15:00.000Z",
+        "history.batterySoc.timeline.25.toTimestamp": "2026-07-19T04:30:00.000Z",
+        "history.batterySoc.timeline.26.value": 74.18,
+        "history.batterySoc.timeline.26.fromTimestamp": "2026-07-19T04:30:00.000Z",
+        "history.batterySoc.timeline.26.toTimestamp": "2026-07-19T04:45:00.000Z",
+        "history.batterySoc.timeline.27.value": 75.42,
+        "history.batterySoc.timeline.27.fromTimestamp": "2026-07-19T04:45:00.000Z",
+        "history.batterySoc.timeline.27.toTimestamp": "2026-07-19T05:00:00.000Z",
+        "history.batterySoc.timeline.28.value": 77.33,
+        "history.batterySoc.timeline.28.fromTimestamp": "2026-07-19T05:00:00.000Z",
+        "history.batterySoc.timeline.28.toTimestamp": "2026-07-19T05:15:00.000Z",
+        "history.batterySoc.timeline.29.value": 79.61,
+        "history.batterySoc.timeline.29.fromTimestamp": "2026-07-19T05:15:00.000Z",
+        "history.batterySoc.timeline.29.toTimestamp": "2026-07-19T05:30:00.000Z",
+        "history.batterySoc.timeline.30.value": 81.7,
+        "history.batterySoc.timeline.30.fromTimestamp": "2026-07-19T05:30:00.000Z",
+        "history.batterySoc.timeline.30.toTimestamp": "2026-07-19T05:45:00.000Z",
+        "history.batterySoc.timeline.31.value": 86.08,
+        "history.batterySoc.timeline.31.fromTimestamp": "2026-07-19T05:45:00.000Z",
+        "history.batterySoc.timeline.31.toTimestamp": "2026-07-19T06:00:00.000Z",
+        "history.batterySoc.timeline.32.value": 90.96,
+        "history.batterySoc.timeline.32.fromTimestamp": "2026-07-19T06:00:00.000Z",
+        "history.batterySoc.timeline.32.toTimestamp": "2026-07-19T06:15:00.000Z",
+        "history.batterySoc.timeline.33.value": 92.59,
+        "history.batterySoc.timeline.33.fromTimestamp": "2026-07-19T06:15:00.000Z",
+        "history.batterySoc.timeline.33.toTimestamp": "2026-07-19T06:30:00.000Z",
+        "history.batterySoc.timeline.34.value": 92.42,
+        "history.batterySoc.timeline.34.fromTimestamp": "2026-07-19T06:30:00.000Z",
+        "history.batterySoc.timeline.34.toTimestamp": "2026-07-19T06:45:00.000Z",
+        "history.batterySoc.timeline.35.value": 93.04,
+        "history.batterySoc.timeline.35.fromTimestamp": "2026-07-19T06:45:00.000Z",
+        "history.batterySoc.timeline.35.toTimestamp": "2026-07-19T07:00:00.000Z",
+        "history.batterySoc.timeline.36.value": 93.84,
+        "history.batterySoc.timeline.36.fromTimestamp": "2026-07-19T07:00:00.000Z",
+        "history.batterySoc.timeline.36.toTimestamp": "2026-07-19T07:15:00.000Z",
+        "history.batterySoc.timeline.37.value": 94.45,
+        "history.batterySoc.timeline.37.fromTimestamp": "2026-07-19T07:15:00.000Z",
+        "history.batterySoc.timeline.37.toTimestamp": "2026-07-19T07:30:00.000Z",
+        "history.batterySoc.timeline.38.value": 94.96,
+        "history.batterySoc.timeline.38.fromTimestamp": "2026-07-19T07:30:00.000Z",
+        "history.batterySoc.timeline.38.toTimestamp": "2026-07-19T07:45:00.000Z",
+        "settings.battery.enabled": false,
+        "settings.battery.threshold": 75,
+        "settings.battery.mode": "gentle",
+        "settings.battery.strategy": "dynamic",
+        "settings.battery.priceLimitWithGridFee": 10.8,
+        "settings.battery.solarPeakModeEnabled": true,
+        "settings.emergencyPower.enabled": true,
+        "settings.emergencyPower.limit": 4,
+        "settings.energyTariff.0.uuid": "e71c452d-3115-4359-a379-b2df22178cdf",
+        "settings.energyTariff.0.from": "2023-12-31T23:00:00.000Z",
+        "settings.energyTariff.0.to": null,
+        "settings.energyTariff.0.price": 52,
+        "settings.energyTariff.0.isDynamic": null,
+        "settings.energyTariff.0.isVariableGridFee": false,
+        "settings.energyTariff.0.createdAt": "2024-08-28T20:09:10.103Z",
+        "settings.energyTariff.0.updatedAt": "2024-08-28T20:09:10.103Z",
+        "settings.gridFeedCompensation.uuid": "7be2aa95-b0f6-42be-b039-1c86f5437185",
+        "settings.gridFeedCompensation.price": 8,
+        "settings.gridFeedCompensation.createdAt": "2024-08-28T20:08:26.520Z",
+        "settings.gridFeedCompensation.updatedAt": "2024-12-04T14:02:33.364Z",
+        "devices.0.kgUuid": "f0ec0d12-e679-4dbe-9818-0bfcaf77edc9",
+        "devices.0.installationDeviceUuid": "a46f542a-eb94-4d32-b630-afe7777af7d2",
+        "devices.0.type": "heatingRod",
+        "devices.0.customName": null,
+        "devices.0.specifications.0.name": "name",
+        "devices.0.specifications.0.value": "AC ELWA®-2",
+        "devices.0.specifications.0.description": "Device name",
+        "devices.0.specifications.1.name": "serialNumber",
+        "devices.0.specifications.1.value": "1601512605280006",
+        "devices.0.specifications.1.description": "Device serial number",
+        "devices.0.specifications.2.name": "manufacturer",
+        "devices.0.specifications.2.value": "my-PV GmbH",
+        "devices.0.specifications.2.description": "Device manufacturer",
+        "devices.0.specifications.3.name": "model",
+        "devices.0.specifications.3.value": "160151",
+        "devices.0.specifications.3.description": "Device model",
+        "devices.0.specifications.4.name": "temperature",
+        "devices.0.specifications.4.value": 45.2,
+        "devices.0.specifications.4.description": "Device temperature",
+        "devices.0.specifications.5.name": "targetTemperature",
+        "devices.0.specifications.5.value": 55,
+        "devices.0.specifications.5.description": "Device target temperature",
+        "devices.0.specifications.6.name": "temperatureTimestamp",
+        "devices.0.specifications.6.value": "2026-07-19T09:56:00+02:00",
+        "devices.0.specifications.6.description": "Device temperature timestamp",
+        "devices.0.optimizationSettings.type": "heatingRod",
+        "devices.0.optimizationSettings.strategy": "pv",
+        "devices.0.optimizationSettings.priority": 0,
+        "devices.0.optimizationSettings.minPower": 100,
+        "devices.0.optimizationSettings.maxPower": 3500,
+        "devices.0.optimizationSettings.minRuntime": null,
+        "devices.0.optimizationSettings.minResttime": null,
+        "devices.0.optimizationSettings.snoozeUntilTimestamp": null,
+        "devices.0.optimizationSettings.chargingPower": null,
+        "devices.0.optimizationSettings.chargingDuration": null,
+        "devices.0.optimizationSettings.maxAmountToCharge": null,
+        "devices.0.optimizationSettings.priceBasedVariant": "dynamic",
+        "devices.0.optimizationSettings.priceLimit": null,
+        "devices.0.details.kgUuid": "f0ec0d12-e679-4dbe-9818-0bfcaf77edc9",
+        "devices.0.details.installationDeviceUuid": "a46f542a-eb94-4d32-b630-afe7777af7d2",
+        "devices.0.details.type": "heatingRod",
+        "devices.0.details.customName": null,
+        "devices.0.details.specifications.0.name": "name",
+        "devices.0.details.specifications.0.value": "AC ELWA®-2",
+        "devices.0.details.specifications.0.description": "Device name",
+        "devices.0.details.specifications.1.name": "serialNumber",
+        "devices.0.details.specifications.1.value": "1601512605280006",
+        "devices.0.details.specifications.1.description": "Device serial number",
+        "devices.0.details.specifications.2.name": "manufacturer",
+        "devices.0.details.specifications.2.value": "my-PV GmbH",
+        "devices.0.details.specifications.2.description": "Device manufacturer",
+        "devices.0.details.specifications.3.name": "model",
+        "devices.0.details.specifications.3.value": "160151",
+        "devices.0.details.specifications.3.description": "Device model",
+        "devices.0.details.specifications.4.name": "temperature",
+        "devices.0.details.specifications.4.value": 45.2,
+        "devices.0.details.specifications.4.description": "Device temperature",
+        "devices.0.details.specifications.5.name": "targetTemperature",
+        "devices.0.details.specifications.5.value": 55,
+        "devices.0.details.specifications.5.description": "Device target temperature",
+        "devices.0.details.specifications.6.name": "temperatureTimestamp",
+        "devices.0.details.specifications.6.value": "2026-07-19T09:56:00+02:00",
+        "devices.0.details.specifications.6.description": "Device temperature timestamp",
+        "devices.0.details.optimizationSettings.type": "heatingRod",
+        "devices.0.details.optimizationSettings.strategy": "pv",
+        "devices.0.details.optimizationSettings.priority": 0,
+        "devices.0.details.optimizationSettings.minPower": 100,
+        "devices.0.details.optimizationSettings.maxPower": 3500,
+        "devices.0.details.optimizationSettings.minRuntime": null,
+        "devices.0.details.optimizationSettings.minResttime": null,
+        "devices.0.details.optimizationSettings.snoozeUntilTimestamp": null,
+        "devices.0.details.optimizationSettings.chargingPower": null,
+        "devices.0.details.optimizationSettings.chargingDuration": null,
+        "devices.0.details.optimizationSettings.maxAmountToCharge": null,
+        "devices.0.details.optimizationSettings.priceBasedVariant": "dynamic",
+        "devices.0.details.optimizationSettings.priceLimit": null,
+        "devices.0.values.name": "AC ELWA®-2",
+        "devices.0.values.serialNumber": "1601512605280006",
+        "devices.0.values.manufacturer": "my-PV GmbH",
+        "devices.0.values.model": "160151",
+        "devices.0.values.temperature": 45.2,
+        "devices.0.values.targetTemperature": 55,
+        "devices.0.values.temperatureTimestamp": "2026-07-19T09:56:00+02:00",
+        "devices.1.kgUuid": "9be19818-f851-4734-8777-ce291fe0c617",
+        "devices.1.installationDeviceUuid": null,
+        "devices.1.type": "gateway",
+        "devices.1.customName": null,
+        "devices.1.specifications.0.name": "name",
+        "devices.1.specifications.0.value": "Ampere.IQ Smartbox",
+        "devices.1.specifications.0.description": "Device name",
+        "devices.1.specifications.1.name": "serialNumber",
+        "devices.1.specifications.1.value": "EVX01-200019421",
+        "devices.1.specifications.1.description": "Device serial number",
+        "devices.1.specifications.2.name": "lastRequest",
+        "devices.1.specifications.2.value": "2026-07-19T07:53:37.466Z",
+        "devices.1.specifications.2.description": "Device last request",
+        "devices.1.specifications.3.name": "connectionStatus",
+        "devices.1.specifications.3.value": "CONNECTED",
+        "devices.1.specifications.3.description": "Device connection status",
+        "devices.1.specifications.4.name": "onlineStatus",
+        "devices.1.specifications.4.value": "ONLINE",
+        "devices.1.specifications.4.description": "Device online status",
+        "devices.1.optimizationSettings": null,
+        "devices.2.kgUuid": "4c4490d3-e41e-4ec1-8150-5ffd8b0fde8a",
+        "devices.2.installationDeviceUuid": null,
+        "devices.2.type": "pv",
+        "devices.2.customName": null,
+        "devices.2.specifications.0.name": "name",
+        "devices.2.specifications.0.value": "PV-Anlage",
+        "devices.2.specifications.0.description": "Device name",
+        "devices.2.optimizationSettings": null,
+        "devices.3.kgUuid": "42ccedd3-f490-47fc-ab20-2aa27ff9ebac",
+        "devices.3.installationDeviceUuid": null,
+        "devices.3.type": "inverter",
+        "devices.3.customName": null,
+        "devices.3.specifications.0.name": "name",
+        "devices.3.specifications.0.value": "AMPERE.StoragePro Inverter",
+        "devices.3.specifications.0.description": "Device name",
+        "devices.3.specifications.1.name": "serialNumber",
+        "devices.3.specifications.1.value": "HSR2103J2311E08738",
+        "devices.3.specifications.1.description": "Device serial number",
+        "devices.3.specifications.2.name": "stateDevice",
+        "devices.3.specifications.2.value": "OK",
+        "devices.3.specifications.2.description": "Device state device",
+        "devices.3.optimizationSettings": null,
+        "devices.4.kgUuid": "4465b1c5-a5d6-44ff-b35f-f7efaa92df89",
+        "devices.4.installationDeviceUuid": null,
+        "devices.4.type": "battery",
+        "devices.4.customName": null,
+        "devices.4.specifications.0.name": "name",
+        "devices.4.specifications.0.value": "AMPERE.StoragePro Battery",
+        "devices.4.specifications.0.description": "Device name",
+        "devices.4.specifications.1.name": "serialNumber",
+        "devices.4.specifications.1.value": "HSR2103J2311E08738",
+        "devices.4.specifications.1.description": "Device serial number",
+        "devices.4.specifications.2.name": "stateDevice",
+        "devices.4.specifications.2.value": "OK",
+        "devices.4.specifications.2.description": "Device state device",
+        "devices.4.optimizationSettings": null,
+        "electricVehicles": []
+    },
+    "data": {
+        "live": {
+            "pvPower": 600,
+            "housePower": -300,
+            "gridPower": 0,
+            "batteryPower": -300,
+            "heatingRodPower": 0,
+            "batterySoc": 95
+        },
+        "today": {
+            "work": {
+                "generation": 3283.72,
+                "consumption": 2443.58,
+                "batteryFeed": 2134.82,
+                "batteryDraw": 1363.36,
+                "gridFeed": 145.5951388888061,
+                "gridDraw": 56.378472222189885
+            },
+            "selfSufficiency": {
+                "value": 97.69
+            },
+            "selfConsumption": {
+                "value": 98.09
+            },
+            "saving": {
+                "energy": {
+                    "pvProduction": 3283.72,
+                    "gridFeed": 145.6,
+                    "ownConsumption": 3138.12
+                },
+                "cost": {
+                    "ownConsumption": 163.18223999999998,
+                    "gridFeedCompensation": 1.1648,
+                    "total": 164.34704,
+                    "gridFeedCompensationPrice": {
+                        "value": 8,
+                        "isDefault": false
+                    },
+                    "electricityPrices": [
+                        {
+                            "price": 52,
+                            "from": "2026-07-18T22:00:00.000Z",
+                            "to": "2026-07-19T21:59:59.999Z",
+                            "isDefault": false
+                        }
+                    ]
+                },
+                "evs": [
+                    {
+                        "distance": 16.418599999999998,
+                        "imageUrl": null,
+                        "customName": null,
+                        "name": null,
+                        "hemsEvUuid": null,
+                        "consumption": 200
+                    }
+                ],
+                "emissions": {
+                    "gramPerWh": 0.346,
+                    "total": 9.490520231213873
+                }
+            }
+        },
+        "history": {
+            "batterySoc": {
+                "total": null,
+                "timeline": [
+                    {
+                        "value": 87.39,
+                        "fromTimestamp": "2026-07-18T22:00:00.000Z",
+                        "toTimestamp": "2026-07-18T22:15:00.000Z"
+                    },
+                    {
+                        "value": 86.54,
+                        "fromTimestamp": "2026-07-18T22:15:00.000Z",
+                        "toTimestamp": "2026-07-18T22:30:00.000Z"
+                    },
+                    {
+                        "value": 85.82,
+                        "fromTimestamp": "2026-07-18T22:30:00.000Z",
+                        "toTimestamp": "2026-07-18T22:45:00.000Z"
+                    },
+                    {
+                        "value": 85.14,
+                        "fromTimestamp": "2026-07-18T22:45:00.000Z",
+                        "toTimestamp": "2026-07-18T23:00:00.000Z"
+                    },
+                    {
+                        "value": 84.51,
+                        "fromTimestamp": "2026-07-18T23:00:00.000Z",
+                        "toTimestamp": "2026-07-18T23:15:00.000Z"
+                    },
+                    {
+                        "value": 83.82,
+                        "fromTimestamp": "2026-07-18T23:15:00.000Z",
+                        "toTimestamp": "2026-07-18T23:30:00.000Z"
+                    },
+                    {
+                        "value": 83.16,
+                        "fromTimestamp": "2026-07-18T23:30:00.000Z",
+                        "toTimestamp": "2026-07-18T23:45:00.000Z"
+                    },
+                    {
+                        "value": 82.49,
+                        "fromTimestamp": "2026-07-18T23:45:00.000Z",
+                        "toTimestamp": "2026-07-19T00:00:00.000Z"
+                    },
+                    {
+                        "value": 81.95,
+                        "fromTimestamp": "2026-07-19T00:00:00.000Z",
+                        "toTimestamp": "2026-07-19T00:15:00.000Z"
+                    },
+                    {
+                        "value": 81.45,
+                        "fromTimestamp": "2026-07-19T00:15:00.000Z",
+                        "toTimestamp": "2026-07-19T00:30:00.000Z"
+                    },
+                    {
+                        "value": 81.01,
+                        "fromTimestamp": "2026-07-19T00:30:00.000Z",
+                        "toTimestamp": "2026-07-19T00:45:00.000Z"
+                    },
+                    {
+                        "value": 80.47,
+                        "fromTimestamp": "2026-07-19T00:45:00.000Z",
+                        "toTimestamp": "2026-07-19T01:00:00.000Z"
+                    },
+                    {
+                        "value": 79.99,
+                        "fromTimestamp": "2026-07-19T01:00:00.000Z",
+                        "toTimestamp": "2026-07-19T01:15:00.000Z"
+                    },
+                    {
+                        "value": 79.36,
+                        "fromTimestamp": "2026-07-19T01:15:00.000Z",
+                        "toTimestamp": "2026-07-19T01:30:00.000Z"
+                    },
+                    {
+                        "value": 78.75,
+                        "fromTimestamp": "2026-07-19T01:30:00.000Z",
+                        "toTimestamp": "2026-07-19T01:45:00.000Z"
+                    },
+                    {
+                        "value": 78.11,
+                        "fromTimestamp": "2026-07-19T01:45:00.000Z",
+                        "toTimestamp": "2026-07-19T02:00:00.000Z"
+                    },
+                    {
+                        "value": 77.65,
+                        "fromTimestamp": "2026-07-19T02:00:00.000Z",
+                        "toTimestamp": "2026-07-19T02:15:00.000Z"
+                    },
+                    {
+                        "value": 77.13,
+                        "fromTimestamp": "2026-07-19T02:15:00.000Z",
+                        "toTimestamp": "2026-07-19T02:30:00.000Z"
+                    },
+                    {
+                        "value": 76.74,
+                        "fromTimestamp": "2026-07-19T02:30:00.000Z",
+                        "toTimestamp": "2026-07-19T02:45:00.000Z"
+                    },
+                    {
+                        "value": 76.26,
+                        "fromTimestamp": "2026-07-19T02:45:00.000Z",
+                        "toTimestamp": "2026-07-19T03:00:00.000Z"
+                    },
+                    {
+                        "value": 75.81,
+                        "fromTimestamp": "2026-07-19T03:00:00.000Z",
+                        "toTimestamp": "2026-07-19T03:15:00.000Z"
+                    },
+                    {
+                        "value": 75.2,
+                        "fromTimestamp": "2026-07-19T03:15:00.000Z",
+                        "toTimestamp": "2026-07-19T03:30:00.000Z"
+                    },
+                    {
+                        "value": 74.55,
+                        "fromTimestamp": "2026-07-19T03:30:00.000Z",
+                        "toTimestamp": "2026-07-19T03:45:00.000Z"
+                    },
+                    {
+                        "value": 73.97,
+                        "fromTimestamp": "2026-07-19T03:45:00.000Z",
+                        "toTimestamp": "2026-07-19T04:00:00.000Z"
+                    },
+                    {
+                        "value": 73.72,
+                        "fromTimestamp": "2026-07-19T04:00:00.000Z",
+                        "toTimestamp": "2026-07-19T04:15:00.000Z"
+                    },
+                    {
+                        "value": 73.79,
+                        "fromTimestamp": "2026-07-19T04:15:00.000Z",
+                        "toTimestamp": "2026-07-19T04:30:00.000Z"
+                    },
+                    {
+                        "value": 74.18,
+                        "fromTimestamp": "2026-07-19T04:30:00.000Z",
+                        "toTimestamp": "2026-07-19T04:45:00.000Z"
+                    },
+                    {
+                        "value": 75.42,
+                        "fromTimestamp": "2026-07-19T04:45:00.000Z",
+                        "toTimestamp": "2026-07-19T05:00:00.000Z"
+                    },
+                    {
+                        "value": 77.33,
+                        "fromTimestamp": "2026-07-19T05:00:00.000Z",
+                        "toTimestamp": "2026-07-19T05:15:00.000Z"
+                    },
+                    {
+                        "value": 79.61,
+                        "fromTimestamp": "2026-07-19T05:15:00.000Z",
+                        "toTimestamp": "2026-07-19T05:30:00.000Z"
+                    },
+                    {
+                        "value": 81.7,
+                        "fromTimestamp": "2026-07-19T05:30:00.000Z",
+                        "toTimestamp": "2026-07-19T05:45:00.000Z"
+                    },
+                    {
+                        "value": 86.08,
+                        "fromTimestamp": "2026-07-19T05:45:00.000Z",
+                        "toTimestamp": "2026-07-19T06:00:00.000Z"
+                    },
+                    {
+                        "value": 90.96,
+                        "fromTimestamp": "2026-07-19T06:00:00.000Z",
+                        "toTimestamp": "2026-07-19T06:15:00.000Z"
+                    },
+                    {
+                        "value": 92.59,
+                        "fromTimestamp": "2026-07-19T06:15:00.000Z",
+                        "toTimestamp": "2026-07-19T06:30:00.000Z"
+                    },
+                    {
+                        "value": 92.42,
+                        "fromTimestamp": "2026-07-19T06:30:00.000Z",
+                        "toTimestamp": "2026-07-19T06:45:00.000Z"
+                    },
+                    {
+                        "value": 93.04,
+                        "fromTimestamp": "2026-07-19T06:45:00.000Z",
+                        "toTimestamp": "2026-07-19T07:00:00.000Z"
+                    },
+                    {
+                        "value": 93.84,
+                        "fromTimestamp": "2026-07-19T07:00:00.000Z",
+                        "toTimestamp": "2026-07-19T07:15:00.000Z"
+                    },
+                    {
+                        "value": 94.45,
+                        "fromTimestamp": "2026-07-19T07:15:00.000Z",
+                        "toTimestamp": "2026-07-19T07:30:00.000Z"
+                    },
+                    {
+                        "value": 94.96,
+                        "fromTimestamp": "2026-07-19T07:30:00.000Z",
+                        "toTimestamp": "2026-07-19T07:45:00.000Z"
+                    }
+                ]
+            }
+        },
+        "settings": {
+            "battery": {
+                "enabled": false,
+                "threshold": 75,
+                "mode": "gentle",
+                "strategy": "dynamic",
+                "priceLimitWithGridFee": 10.8,
+                "solarPeakModeEnabled": true
+            },
+            "emergencyPower": {
+                "enabled": true,
+                "limit": 4
+            },
+            "energyTariff": [
+                {
+                    "uuid": "e71c452d-3115-4359-a379-b2df22178cdf",
+                    "from": "2023-12-31T23:00:00.000Z",
+                    "to": null,
+                    "price": 52,
+                    "isDynamic": null,
+                    "isVariableGridFee": false,
+                    "createdAt": "2024-08-28T20:09:10.103Z",
+                    "updatedAt": "2024-08-28T20:09:10.103Z"
+                }
+            ],
+            "gridFeedCompensation": {
+                "uuid": "7be2aa95-b0f6-42be-b039-1c86f5437185",
+                "price": 8,
+                "createdAt": "2024-08-28T20:08:26.520Z",
+                "updatedAt": "2024-12-04T14:02:33.364Z"
+            }
+        },
+        "devices": [
+            {
+                "kgUuid": "f0ec0d12-e679-4dbe-9818-0bfcaf77edc9",
+                "installationDeviceUuid": "a46f542a-eb94-4d32-b630-afe7777af7d2",
+                "type": "heatingRod",
+                "customName": null,
+                "specifications": [
+                    {
+                        "name": "name",
+                        "value": "AC ELWA®-2",
+                        "description": "Device name"
+                    },
+                    {
+                        "name": "serialNumber",
+                        "value": "1601512605280006",
+                        "description": "Device serial number"
+                    },
+                    {
+                        "name": "manufacturer",
+                        "value": "my-PV GmbH",
+                        "description": "Device manufacturer"
+                    },
+                    {
+                        "name": "model",
+                        "value": "160151",
+                        "description": "Device model"
+                    },
+                    {
+                        "name": "temperature",
+                        "value": 45.2,
+                        "description": "Device temperature"
+                    },
+                    {
+                        "name": "targetTemperature",
+                        "value": 55,
+                        "description": "Device target temperature"
+                    },
+                    {
+                        "name": "temperatureTimestamp",
+                        "value": "2026-07-19T09:56:00+02:00",
+                        "description": "Device temperature timestamp"
+                    }
+                ],
+                "optimizationSettings": {
+                    "type": "heatingRod",
+                    "strategy": "pv",
+                    "priority": 0,
+                    "minPower": 100,
+                    "maxPower": 3500,
+                    "minRuntime": null,
+                    "minResttime": null,
+                    "snoozeUntilTimestamp": null,
+                    "chargingPower": null,
+                    "chargingDuration": null,
+                    "maxAmountToCharge": null,
+                    "priceBasedVariant": "dynamic",
+                    "priceLimit": null
+                },
+                "details": {
+                    "kgUuid": "f0ec0d12-e679-4dbe-9818-0bfcaf77edc9",
+                    "installationDeviceUuid": "a46f542a-eb94-4d32-b630-afe7777af7d2",
+                    "type": "heatingRod",
+                    "customName": null,
+                    "specifications": [
+                        {
+                            "name": "name",
+                            "value": "AC ELWA®-2",
+                            "description": "Device name"
+                        },
+                        {
+                            "name": "serialNumber",
+                            "value": "1601512605280006",
+                            "description": "Device serial number"
+                        },
+                        {
+                            "name": "manufacturer",
+                            "value": "my-PV GmbH",
+                            "description": "Device manufacturer"
+                        },
+                        {
+                            "name": "model",
+                            "value": "160151",
+                            "description": "Device model"
+                        },
+                        {
+                            "name": "temperature",
+                            "value": 45.2,
+                            "description": "Device temperature"
+                        },
+                        {
+                            "name": "targetTemperature",
+                            "value": 55,
+                            "description": "Device target temperature"
+                        },
+                        {
+                            "name": "temperatureTimestamp",
+                            "value": "2026-07-19T09:56:00+02:00",
+                            "description": "Device temperature timestamp"
+                        }
+                    ],
+                    "optimizationSettings": {
+                        "type": "heatingRod",
+                        "strategy": "pv",
+                        "priority": 0,
+                        "minPower": 100,
+                        "maxPower": 3500,
+                        "minRuntime": null,
+                        "minResttime": null,
+                        "snoozeUntilTimestamp": null,
+                        "chargingPower": null,
+                        "chargingDuration": null,
+                        "maxAmountToCharge": null,
+                        "priceBasedVariant": "dynamic",
+                        "priceLimit": null
+                    }
+                },
+                "values": {
+                    "name": "AC ELWA®-2",
+                    "serialNumber": "1601512605280006",
+                    "manufacturer": "my-PV GmbH",
+                    "model": "160151",
+                    "temperature": 45.2,
+                    "targetTemperature": 55,
+                    "temperatureTimestamp": "2026-07-19T09:56:00+02:00"
+                }
+            },
+            {
+                "kgUuid": "9be19818-f851-4734-8777-ce291fe0c617",
+                "installationDeviceUuid": null,
+                "type": "gateway",
+                "customName": null,
+                "specifications": [
+                    {
+                        "name": "name",
+                        "value": "Ampere.IQ Smartbox",
+                        "description": "Device name"
+                    },
+                    {
+                        "name": "serialNumber",
+                        "value": "EVX01-200019421",
+                        "description": "Device serial number"
+                    },
+                    {
+                        "name": "lastRequest",
+                        "value": "2026-07-19T07:53:37.466Z",
+                        "description": "Device last request"
+                    },
+                    {
+                        "name": "connectionStatus",
+                        "value": "CONNECTED",
+                        "description": "Device connection status"
+                    },
+                    {
+                        "name": "onlineStatus",
+                        "value": "ONLINE",
+                        "description": "Device online status"
+                    }
+                ],
+                "optimizationSettings": null
+            },
+            {
+                "kgUuid": "4c4490d3-e41e-4ec1-8150-5ffd8b0fde8a",
+                "installationDeviceUuid": null,
+                "type": "pv",
+                "customName": null,
+                "specifications": [
+                    {
+                        "name": "name",
+                        "value": "PV-Anlage",
+                        "description": "Device name"
+                    }
+                ],
+                "optimizationSettings": null
+            },
+            {
+                "kgUuid": "42ccedd3-f490-47fc-ab20-2aa27ff9ebac",
+                "installationDeviceUuid": null,
+                "type": "inverter",
+                "customName": null,
+                "specifications": [
+                    {
+                        "name": "name",
+                        "value": "AMPERE.StoragePro Inverter",
+                        "description": "Device name"
+                    },
+                    {
+                        "name": "serialNumber",
+                        "value": "HSR2103J2311E08738",
+                        "description": "Device serial number"
+                    },
+                    {
+                        "name": "stateDevice",
+                        "value": "OK",
+                        "description": "Device state device"
+                    }
+                ],
+                "optimizationSettings": null
+            },
+            {
+                "kgUuid": "4465b1c5-a5d6-44ff-b35f-f7efaa92df89",
+                "installationDeviceUuid": null,
+                "type": "battery",
+                "customName": null,
+                "specifications": [
+                    {
+                        "name": "name",
+                        "value": "AMPERE.StoragePro Battery",
+                        "description": "Device name"
+                    },
+                    {
+                        "name": "serialNumber",
+                        "value": "HSR2103J2311E08738",
+                        "description": "Device serial number"
+                    },
+                    {
+                        "name": "stateDevice",
+                        "value": "OK",
+                        "description": "Device state device"
+                    }
+                ],
+                "optimizationSettings": null
+            }
+        ],
+        "electricVehicles": []
+    },
+    "writable": {
+        "notice": "Nur Beschreibung. Dieser Exporter schreibt keine Werte in die Cloud.",
+        "battery": {
+            "endpoint": "/api/v1/installation/{installationId}/hems/setting/battery",
+            "currentValues": {
+                "enabled": false,
+                "threshold": 75,
+                "mode": "gentle",
+                "strategy": "dynamic",
+                "priceLimitWithGridFee": 10.8,
+                "solarPeakModeEnabled": true
+            }
+        },
+        "emergencyPower": {
+            "endpoint": "/api/v1/installation/{installationId}/hems_setting/emergency_power",
+            "currentValues": {
+                "enabled": true,
+                "limit": 4
+            }
+        },
+        "energyTariff": {
+            "endpoint": "/api/v1/installation/{installationId}/hems/energyTariff",
+            "currentValues": [
+                {
+                    "uuid": "e71c452d-3115-4359-a379-b2df22178cdf",
+                    "from": "2023-12-31T23:00:00.000Z",
+                    "to": null,
+                    "price": 52,
+                    "isDynamic": null,
+                    "isVariableGridFee": false,
+                    "createdAt": "2024-08-28T20:09:10.103Z",
+                    "updatedAt": "2024-08-28T20:09:10.103Z"
+                }
+            ]
+        },
+        "gridFeedCompensation": {
+            "endpoint": "/api/v1/installation/{installationId}/hems/gridFeedCompensationPrice",
+            "currentValues": {
+                "uuid": "7be2aa95-b0f6-42be-b039-1c86f5437185",
+                "price": 8,
+                "createdAt": "2024-08-28T20:08:26.520Z",
+                "updatedAt": "2024-12-04T14:02:33.364Z"
+            }
+        },
+        "devices": {
+            "a46f542a-eb94-4d32-b630-afe7777af7d2": {
+                "endpoint": "/api/v1/installation/{installationId}/hems/device/a46f542a-eb94-4d32-b630-afe7777af7d2",
+                "optimizationSettings": {
+                    "type": "heatingRod",
+                    "strategy": "pv",
+                    "priority": 0,
+                    "minPower": 100,
+                    "maxPower": 3500,
+                    "minRuntime": null,
+                    "minResttime": null,
+                    "snoozeUntilTimestamp": null,
+                    "chargingPower": null,
+                    "chargingDuration": null,
+                    "maxAmountToCharge": null,
+                    "priceBasedVariant": "dynamic",
+                    "priceLimit": null
+                }
+            }
+        }
+    },
+    "errors": []
+}

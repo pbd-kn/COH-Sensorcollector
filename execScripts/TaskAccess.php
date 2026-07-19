@@ -478,6 +478,167 @@ final class AmpereIqHttpAccess
         return $this->requestWithRetry('GET', $path);
     }
 
+    /**
+     * Liest einen fachlichen Ampere.IQ-Wert ueber einen einfachen Namen.
+     *
+     * Beispiele:
+     *   $client->getValue('soc');
+     *   $client->getValue('live.power.batteryPower');
+     *   $client->getValue('today.work');
+     *   $client->getValue('today.work.consumation');
+     *   $client->getValue('today-saving-total');
+     *
+     * Einzelpfade liefern direkt den skalaren Wert. Bereichsnamen liefern die
+     * vollstaendige JSON-Antwort als Array. Es muss kein Export-Script geladen
+     * werden; die Funktion gehoert direkt zu AmpereIqHttpAccess.
+     */
+    public function getValue(string $selection): mixed
+    {
+        $selection = ltrim(trim($selection), "\xEF\xBB\xBF");
+        if ($selection === '') {
+            throw new InvalidArgumentException('Ampere.IQ-Auswahl fehlt.');
+        }
+
+        $endpoints = $this->valueEndpoints();
+        $aliases = $this->valueAliases();
+        $lower = strtolower($selection);
+        $selection = $aliases[$lower] ?? $selection;
+
+        if (strtolower($selection) === 'live.power') {
+            $selection = 'live';
+        } elseif (str_starts_with(strtolower($selection), 'live.power.')) {
+            $selection = 'live.' . substr($selection, strlen('live.power.'));
+        }
+
+        if (in_array(strtolower($selection), ['today', 'heute'], true)) {
+            return [
+                'work' => $this->get($endpoints['today.work']),
+                'selfSufficiency' => $this->get($endpoints['today.selfSufficiency']),
+                'selfConsumption' => $this->get($endpoints['today.selfConsumption']),
+                'saving' => $this->get($endpoints['today.saving']),
+            ];
+        }
+
+        if (preg_match('/^(?:device|geraet)\s+(.+)$/i', $selection, $matches)) {
+            $uuid = trim($matches[1]);
+            if ($uuid === '') {
+                throw new InvalidArgumentException('Geraete-UUID fehlt.');
+            }
+            return $this->get('/api/v1/installation/{installationId}/hems/device/' . rawurlencode($uuid));
+        }
+
+        foreach ($endpoints as $name => $endpoint) {
+            if (strtolower($name) === strtolower($selection)) {
+                return $this->get($endpoint);
+            }
+        }
+
+        $endpointNames = array_keys($endpoints);
+        usort($endpointNames, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+        foreach ($endpointNames as $endpointName) {
+            $prefix = $endpointName . '.';
+            if (!str_starts_with(strtolower($selection), strtolower($prefix))) {
+                continue;
+            }
+            $path = substr($selection, strlen($prefix));
+            $response = $this->get($endpoints[$endpointName]);
+            return $this->valueFromResponse($response, $path, $endpointName);
+        }
+
+        throw new InvalidArgumentException("Unbekannte Ampere.IQ-Auswahl '$selection'.");
+    }
+
+    /** @return array<string, string> */
+    private function valueEndpoints(): array
+    {
+        $dayQuery = '?period=day&date=' . rawurlencode(date('Y-m-d'));
+        return [
+            'live' => '/api/v1/installation/{installationId}/now/all/power',
+            'today.work' => '/api/v1/installation/{installationId}/total/common/work' . $dayQuery,
+            'today.selfSufficiency' => '/api/v1/installation/{installationId}/total/selfSufficiency' . $dayQuery,
+            'today.selfConsumption' => '/api/v1/installation/{installationId}/total/selfConsumption' . $dayQuery,
+            'today.saving' => '/api/v2/installation/{installationId}/saving' . $dayQuery,
+            'history.batterySoc' => '/api/v1/installation/{installationId}/history/stateOfCharge'
+                . '?date=' . rawurlencode(date(DATE_ATOM)) . '&period=day&resolution=15m',
+            'settings.battery' => '/api/v1/installation/{installationId}/hems/setting/battery',
+            'settings.emergencyPower' => '/api/v1/installation/{installationId}/hems_setting/emergency_power',
+            'settings.energyTariff' => '/api/v1/installation/{installationId}/hems/energyTariff',
+            'settings.gridFeedCompensation' => '/api/v1/installation/{installationId}/hems/gridFeedCompensationPrice',
+            'devices' => '/api/v1/installation/{installationId}/hems/device',
+            'electricVehicles' => '/api/v1/installation/{installationId}/hems/ev',
+        ];
+    }
+
+    /** @return array<string, string> */
+    private function valueAliases(): array
+    {
+        return [
+            'soc' => 'live.batterySoc',
+            'batterysoc' => 'live.batterySoc',
+            'batterie-soc' => 'live.batterySoc',
+            'flow' => 'live',
+            'energiefluss' => 'live',
+            'work' => 'today.work',
+            'arbeit' => 'today.work',
+            'today-work' => 'today.work',
+            'today-self-sufficiency' => 'today.selfSufficiency',
+            'today-autarkie' => 'today.selfSufficiency',
+            'today-self-consumption' => 'today.selfConsumption',
+            'today-eigenverbrauch' => 'today.selfConsumption',
+            'today-saving' => 'today.saving',
+            'today-ersparnis' => 'today.saving',
+            'today-saving-energy' => 'today.saving.energy',
+            'today-saving-pv-production' => 'today.saving.energy.pvProduction',
+            'today-saving-grid-feed' => 'today.saving.energy.gridFeed',
+            'today-saving-own-consumption' => 'today.saving.energy.ownConsumption',
+            'today-saving-cost' => 'today.saving.cost',
+            'today-saving-own-consumption-cost' => 'today.saving.cost.ownConsumption',
+            'today-saving-grid-feed-compensation' => 'today.saving.cost.gridFeedCompensation',
+            'today-saving-total' => 'today.saving.cost.total',
+            'today-saving-grid-feed-price' => 'today.saving.cost.gridFeedCompensationPrice.value',
+            'today-saving-electricity-prices' => 'today.saving.cost.electricityPrices',
+            'today-saving-evs' => 'today.saving.evs',
+            'today-saving-emissions' => 'today.saving.emissions',
+            'today-saving-emissions-factor' => 'today.saving.emissions.gramPerWh',
+            'today-saving-emissions-total' => 'today.saving.emissions.total',
+            'soc-history' => 'history.batterySoc',
+            'batterie-verlauf' => 'history.batterySoc',
+            'battery-settings' => 'settings.battery',
+            'batterie-einstellungen' => 'settings.battery',
+            'notstrom' => 'settings.emergencyPower',
+            'tarif' => 'settings.energyTariff',
+            'einspeiseverguetung' => 'settings.gridFeedCompensation',
+            'autos' => 'electricVehicles',
+        ];
+    }
+
+    private function valueFromResponse(array $response, string $path, string $area): mixed
+    {
+        $cursor = $response;
+        $aliases = [
+            'consumation' => 'consumption',
+            'consumptionpower' => 'housePower',
+        ];
+        foreach (explode('.', $path) as $part) {
+            if (!is_array($cursor)) {
+                throw new InvalidArgumentException("Ampere.IQ-Pfad '$area.$path' ist kein Wertpfad.");
+            }
+            $wanted = $aliases[strtolower($part)] ?? $part;
+            $actualKey = null;
+            foreach (array_keys($cursor) as $key) {
+                if (strtolower((string)$key) === strtolower($wanted)) {
+                    $actualKey = $key;
+                    break;
+                }
+            }
+            if ($actualKey === null) {
+                throw new InvalidArgumentException("Ampere.IQ-Wert '$area.$path' existiert nicht.");
+            }
+            $cursor = $cursor[$actualKey];
+        }
+        return $cursor;
+    }
+
     public function patch(string $path, array $values): array
     {
         return $this->requestWithRetry('PATCH', $path, $values);

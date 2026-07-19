@@ -21,6 +21,19 @@ $live = $iq->get('/api/v1/installation/{installationId}/now/all/power');
 $antwort = $iq->get('/api/v1/installation/{installationId}/hems/device');
 ```
 
+Werte koennen auch direkt ueber fachliche Namen gelesen werden. Dafuer muss
+kein anderes Script wie `json-solar-iqexport-loop.php` geladen werden:
+
+```php
+$batterySoc = $iq->getValue('soc');
+$batteryPower = $iq->getValue('live.power.batteryPower');
+$today = $iq->getValue('today.work');
+$consumption = $iq->getValue('today.work.consumation');
+$saving = $iq->getValue('today-saving-total');
+```
+
+Einzelpfade liefern direkt den Wert, Bereiche liefern ein Array.
+
 Ein Schreibzugriff auf einen bekannten Endpunkt ist ebenfalls generisch moeglich:
 
 ```php
@@ -84,4 +97,3 @@ php task-access-test.php ampere
 php task-access-test.php cloud
 php task-access-test.php local
 ```
-
