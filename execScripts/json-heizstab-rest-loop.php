@@ -117,6 +117,50 @@ try {
             continue;
         }
 
+        if (in_array(strtolower($filter), ['api endpoints', 'endpoints'], true)) {
+            printApiEndpoints();
+            continue;
+        }
+
+        if (preg_match('/^api\s+get\s+logdata(?:\s+(.*))?$/i', $filter, $matches)) {
+            executeApiLogdata(trim((string)($matches[1] ?? '')));
+            continue;
+        }
+
+        if (preg_match('/^api\s+get\s+(isOnline|isPowerControlPossible|data(?:\/soc)?|solarForecast|setup)$/i', $filter, $matches)) {
+            executeApiRequestAndPrint('GET', $matches[1]);
+            continue;
+        }
+
+        if (preg_match('/^api\s+get\s+(.+)$/i', $filter, $matches)) {
+            $name = trim($matches[1]);
+            echo "WARNUNG: '$name' ist kein unterstuetzter my-PV-API-Endpunkt." . PHP_EOL;
+            echo "Ein geladenes Feld lesen Sie mit 'get $name', eindeutig z.B. 'get api.data.$name'." . PHP_EOL;
+            continue;
+        }
+
+        if (preg_match('/^(?:get|wert|value|select)\s+(.+)$/i', $filter, $matches)) {
+            printSelectedItem($items, trim($matches[1]));
+            continue;
+        }
+
+        if (preg_match('/^(?:(?:api\s+)?power|post\s+power)\s+(\d+)(?:\s+(\d+))?$/i', $filter, $matches)) {
+            $watts = min(6500, (int)$matches[1]);
+            $minutes = max(1, (int)($matches[2] ?? 20));
+            executeApiRequestAndPrint('POST', 'power', buildApiPowerPayload($watts, $minutes));
+            continue;
+        }
+
+        if (preg_match('/^(?:api\s+)?put\s+setup\s+(.+)$/i', $filter, $matches)) {
+            $payload = json_decode($matches[1], true);
+            if (!is_array($payload) || json_last_error() !== JSON_ERROR_NONE) {
+                echo 'WARNUNG: setup erwartet ein JSON-Objekt, z.B. api put setup {"ww1target":55}' . PHP_EOL;
+                continue;
+            }
+            executeApiRequestAndPrint('PUT', 'setup', $payload);
+            continue;
+        }
+
         if (preg_match('/^post\s+(.+)$/i', $filter, $matches)) {
             if ($mode !== 'local') {
                 echo 'WARNUNG: post ist nur in mode local erlaubt. Im API-Modus wird kein Schreibbefehl gesendet.' . PHP_EOL;
@@ -363,6 +407,70 @@ function executeApiPath(string $path): void
     foreach (flattenJson($result, 'api.' . $endpoint) as $item) {
         echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
     }
+}
+
+function executeApiRequestAndPrint(string $method, string $endpoint, ?array $payload = null): void
+{
+    try {
+        $result = apiRequest($method, $endpoint, $payload);
+        echo $method . ' ' . buildApiUrl($endpoint) . PHP_EOL;
+        if ($payload !== null) {
+            echo 'Gesendet: ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        }
+        if ($result === []) {
+            echo 'Erfolgreich (leere Antwort).' . PHP_EOL;
+            return;
+        }
+        printCompactItems(flattenJson($result, 'api.' . $endpoint));
+    } catch (Throwable $e) {
+        echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+    }
+}
+
+function buildApiPowerPayload(int $watts, int $minutes): array
+{
+    return [
+        'power' => max(0, min(6500, $watts)),
+        'validForMinutes' => max(1, $minutes),
+        'timeBoostOverride' => 0,
+        'timeBoostValue' => 0,
+        'legionellaBoostBlock' => 1,
+    ];
+}
+
+function executeApiLogdata(string $arguments): void
+{
+    if (!preg_match('/^(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})(?:\s+(15m|1h|1d|1mo|1y))?(?:\s+([A-Za-z_]+\/[A-Za-z_]+))?$/', $arguments, $matches)) {
+        echo 'Verwendung: api get logdata BEGIN ENDE [INTERVALL] [ZEITZONE]' . PHP_EOL;
+        echo 'Beispiel:   api get logdata 2026-07-20 2026-07-21 1h Europe/Berlin' . PHP_EOL;
+        echo 'Intervalle: 15m, 1h, 1d, 1mo oder 1y; Zeitzone ist standardmaessig Europe/Berlin.' . PHP_EOL;
+        echo 'Hinweis: my-PV erlaubt maximal 50 logdata-Abfragen pro Geraet in 24 Stunden.' . PHP_EOL;
+        return;
+    }
+
+    $beginDate = $matches[1];
+    $endDate = $matches[2];
+    if (!isValidIsoDate($beginDate) || !isValidIsoDate($endDate) || $beginDate > $endDate) {
+        echo 'WARNUNG: Ungueltiger Zeitraum. Erwartet wird BEGIN <= ENDE im Format JJJJ-MM-TT.' . PHP_EOL;
+        return;
+    }
+
+    $query = [
+        'beginDate' => $beginDate,
+        'endDate' => $endDate,
+        'timezone' => $matches[4] ?? 'Europe/Berlin',
+    ];
+    if (($matches[3] ?? '') !== '') {
+        $query['interval'] = $matches[3];
+    }
+
+    executeApiRequestAndPrint('GET', 'logdata?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986));
+}
+
+function isValidIsoDate(string $date): bool
+{
+    $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+    return $parsed !== false && $parsed->format('Y-m-d') === $date;
 }
 
 function apiRequest(string $method, string $endpoint, ?array $payload = null): array
@@ -937,8 +1045,11 @@ function printHelp(): void
 {
     echo PHP_EOL;
     echo 'Bedienung:' . PHP_EOL;
-    echo '  leer          alle Werte anzeigen' . PHP_EOL;
+    echo '  leer/list     alle Werte als kompakte, nach Quelle gruppierte Tabelle anzeigen' . PHP_EOL;
     echo '  text          Suche in Quelle, Key, Pfad, Wert oder Typ' . PHP_EOL;
+    echo '  get NAME      geladenes Feld lesen, z.B. get device oder get api.data.device' . PHP_EOL;
+    echo '                alternativ: wert NAME oder value NAME' . PHP_EOL;
+    echo '                bei doppelten Keys mit Quelle/Pfad eindeutig auswaehlen' . PHP_EOL;
     echo '  %text%        LIKE-Suche mit % als Platzhalter, z.B. %temp%' . PHP_EOL;
     echo '  mode local    lokale Heizstab-REST-Schnittstelle verwenden' . PHP_EOL;
     echo '  mode api      offizielle my-PV API wie checkheizstabdata.php verwenden' . PHP_EOL;
@@ -955,11 +1066,36 @@ function printHelp(): void
     echo '  post a=b      lokalen POST auf setup.jsn ausfuehren, z.B. post bststrt=1' . PHP_EOL;
     echo '  /data.jsn?bststrt=0  direkten Heizstab-Pfad ausfuehren' . PHP_EOL;
     echo '  /data         im API-Modus API-Endpunkt data ausfuehren' . PHP_EOL;
+    echo '  endpoints     alle unterstuetzten my-PV-Cloud-Endpunkte anzeigen' . PHP_EOL;
+    echo '  api get NAME       echten Cloud-Endpunkt abrufen, z.B. api get isOnline' . PHP_EOL;
+    echo '  api get logdata BEGIN ENDE [INTERVALL] [ZEITZONE]' . PHP_EOL;
+    echo '                     z.B. api get logdata 2026-07-20 2026-07-21 1h Europe/Berlin' . PHP_EOL;
+    echo '  api power W [MIN]  Cloud-Leistung setzen, z.B. api power 1000 20 oder api power 0' . PHP_EOL;
+    echo '  POST power W [MIN] Kurzform fuer api power W [MIN]' . PHP_EOL;
+    echo '  api put setup JSON Cloud-Setup aendern, z.B. api put setup {"ww1target":55}' . PHP_EOL;
+    echo '  PUT setup JSON     Kurzform fuer api put setup JSON' . PHP_EOL;
     echo '  /setup.jsn            direkten Heizstab-Pfad ausfuehren' . PHP_EOL;
     echo '  r             data.jsn und setup.jsn neu laden' . PHP_EOL;
     echo '  raw           data.jsn und setup.jsn komplett als JSON-Dateien speichern' . PHP_EOL;
     echo '  ?             diese Hilfe anzeigen' . PHP_EOL;
     echo '  q             beenden' . PHP_EOL;
+}
+
+function printApiEndpoints(): void
+{
+    echo PHP_EOL . 'my-PV Cloud API (AC ELWA 2):' . PHP_EOL;
+    echo '  api get isOnline                 Online-Status' . PHP_EOL;
+    echo '  api get isPowerControlPossible   Fernsteuerung moeglich?' . PHP_EOL;
+    echo '  api get data                     Live-Daten' . PHP_EOL;
+    echo '  api get data/soc                 State of Charge' . PHP_EOL;
+    echo '  api get solarForecast            Solarprognose' . PHP_EOL;
+    echo '  api get logdata BEGIN ENDE [INTERVALL] [ZEITZONE]' . PHP_EOL;
+    echo '                                      Logdaten; max. 50 Aufrufe je 24 Stunden' . PHP_EOL;
+    echo '  api get setup                    Einstellungen lesen' . PHP_EOL;
+    echo '  api power W [MIN]                Leistung fuer AC ELWA 2 setzen' . PHP_EOL;
+    echo '  api put setup JSON               Einstellungen aendern' . PHP_EOL;
+    echo 'Hinweis: get NAME liest ein geladenes Feld; api get NAME ruft die Cloud auf.' . PHP_EOL;
+    echo 'Dokumentation: https://api.my-pv.com/api-docs/' . PHP_EOL;
 }
 
 function writeRawJsonFiles(array $rawData): array
@@ -986,20 +1122,74 @@ function writeRawJsonFiles(array $rawData): array
 
 function printItems(array $items, string $filter): void
 {
+    if (in_array(strtolower(trim($filter)), ['', 'list', 'alle', 'all'], true)) {
+        printCompactItems($items);
+        return;
+    }
+
     $rows = array_values(array_filter($items, static fn (array $item): bool => itemMatches($item, $filter)));
 
-    echo PHP_EOL;
-    echo 'Treffer: ' . count($rows) . PHP_EOL;
-    echo str_repeat('=', 100) . PHP_EOL;
+    printCompactItems($rows);
+}
 
-    foreach ($rows as $index => $row) {
-        echo '[' . $index . '] ' . $row['source'] . ' -> ' . $row['path'] . PHP_EOL;
-        echo '    Key:    ' . $row['key'] . PHP_EOL;
-        echo '    Wert:   ' . formatValue($row['value']) . PHP_EOL;
-        echo '    Typ:    ' . $row['type'] . PHP_EOL;
-        echo '    Quelle: ' . $row['source'] . PHP_EOL;
-        echo str_repeat('-', 100) . PHP_EOL;
+function printCompactItems(array $rows): void
+{
+    echo PHP_EOL . 'Treffer: ' . count($rows) . PHP_EOL;
+    if ($rows === []) {
+        echo 'Keine Werte gefunden.' . PHP_EOL;
+        return;
     }
+
+    $numberWidth = max(2, strlen((string)(count($rows) - 1)));
+    $pathWidth = min(52, max(4, ...array_map(static fn (array $row): int => strlen((string)$row['path']), $rows)));
+    $source = null;
+    foreach ($rows as $index => $row) {
+        if ($source !== $row['source']) {
+            $source = $row['source'];
+            echo PHP_EOL . '[' . $source . ']' . PHP_EOL;
+            echo str_pad('Nr', $numberWidth) . '  ' . str_pad('Pfad innerhalb der Quelle', $pathWidth) . '  Wert' . PHP_EOL;
+            echo str_repeat('-', $numberWidth) . '  ' . str_repeat('-', $pathWidth) . '  ' . str_repeat('-', 24) . PHP_EOL;
+        }
+        $path = (string)$row['path'];
+        if (strlen($path) > $pathWidth) {
+            $path = '...' . substr($path, -($pathWidth - 3));
+        }
+        echo str_pad((string)$index, $numberWidth, ' ', STR_PAD_LEFT) . '  '
+            . str_pad($path, $pathWidth) . '  ' . formatValue($row['value']) . PHP_EOL;
+    }
+}
+
+function printSelectedItem(array $items, string $selection, string $label = 'Wert'): void
+{
+    if (ctype_digit($selection) && isset($items[(int)$selection])) {
+        $matches = [$items[(int)$selection]];
+    } else {
+        $matches = array_values(array_filter($items, static function (array $item) use ($selection): bool {
+            return strcasecmp((string)$item['key'], $selection) === 0
+                || strcasecmp((string)$item['path'], $selection) === 0
+                || strcasecmp((string)$item['source'] . '.' . (string)$item['path'], $selection) === 0;
+        }));
+    }
+
+    if ($matches === []) {
+        $sources = array_values(array_unique(array_map(static fn (array $item): string => (string)$item['source'], $items)));
+        $key = str_contains($selection, '.') ? substr($selection, strrpos($selection, '.') + 1) : $selection;
+        $suggestions = array_values(array_filter($items, static fn (array $item): bool => strcasecmp((string)$item['key'], $key) === 0));
+
+        echo "Keinen exakten $label fuer '$selection' gefunden." . PHP_EOL;
+        echo 'Aktuell geladene Quellen: ' . ($sources === [] ? 'keine' : implode(', ', $sources)) . PHP_EOL;
+        if ($suggestions !== []) {
+            echo 'Vorhandene vollstaendige Pfade:' . PHP_EOL;
+            foreach ($suggestions as $item) {
+                echo '  get ' . $item['source'] . '.' . $item['path'] . PHP_EOL;
+            }
+        } else {
+            echo "Mit 'list' oder einer Textsuche finden Sie den Namen." . PHP_EOL;
+        }
+        return;
+    }
+
+    printCompactItems($matches);
 }
 
 function itemMatches(array $item, string $filter): bool
@@ -1012,6 +1202,7 @@ function itemMatches(array $item, string $filter): bool
     $haystacks = [
         (string)$item['source'],
         (string)$item['path'],
+        (string)$item['source'] . '.' . (string)$item['path'],
         (string)$item['key'],
         formatValue($item['value']),
         (string)$item['type'],

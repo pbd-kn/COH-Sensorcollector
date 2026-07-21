@@ -34,6 +34,25 @@ $saving = $iq->getValue('today-saving-total');
 
 Einzelpfade liefern direkt den Wert, Bereiche liefern ein Array.
 
+Vergangene Tageswerte werden ueber den optionalen zweiten Parameter gelesen:
+
+```php
+$yesterdayEnergy = $iq->getValue('today.saving.energy', '2026-07-18');
+$yesterdayConsumption = $iq->getValue('today.work.consumption', '2026-07-18');
+```
+
+Verlaufswerte sind ueber dieselbe Methode erreichbar:
+
+```php
+$soc = $iq->getValue('history.batterySoc', '2026-07-18');
+$power = $iq->getValue('history.common.power', '2026-07-18');
+$work = $iq->getValue('history.common.work', '2026-07-18');
+$consumerPower = $iq->getValue('history.consumption.power', '2026-07-18');
+$consumerWork = $iq->getValue('history.consumption.work', '2026-07-18');
+$gridDraw = $iq->getValue('history.gridDraw.work', '2026-07-18');
+$prices = $iq->getValue('history.electricityPrice', '2026-07-18');
+```
+
 Ein Schreibzugriff auf einen bekannten Endpunkt ist ebenfalls generisch moeglich:
 
 ```php

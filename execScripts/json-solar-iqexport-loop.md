@@ -63,6 +63,27 @@ php json-solar-iqexport-loop.php --once=today.work.consumption
 Bei Pfaden wird die Gross-/Kleinschreibung ignoriert. Die abweichende Schreibweise
 `today.work.consumation` wird ebenfalls als `today.work.consumption` verstanden.
 
+Vergangene Tageswerte werden interaktiv mit einem Datum hinter dem Pfad gelesen:
+
+```text
+today.saving.energy 2026-07-18
+today.work.consumption 2026-07-18
+today-saving-total 2026-07-18
+history.batterySoc 2026-07-18
+history.common.power 2026-07-18
+history.common.work 2026-07-18
+history.consumption.power 2026-07-18
+history.consumption.work 2026-07-18
+history.gridDraw.work 2026-07-18
+history.electricityPrice 2026-07-18
+```
+
+Im PHP-Code kann dasselbe Datum als zweiter Parameter uebergeben werden:
+
+```php
+$energy = $iq->getValue('today.saving.energy', '2026-07-18');
+```
+
 ## Vollstaendige Exportdatei erzeugen
 
 ```bash

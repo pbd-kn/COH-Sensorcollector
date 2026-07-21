@@ -35,6 +35,8 @@ try {
     $installationId = $client->installationId();
     $today = date('Y-m-d');
     $dayQuery = '?period=day&date=' . rawurlencode($today);
+    $todayStart = (new DateTimeImmutable($today))->format(DATE_ATOM);
+    $tomorrowStart = (new DateTimeImmutable($today))->modify('+1 day')->format(DATE_ATOM);
 
     $readEndpoints = [
         'live' => '/api/v1/installation/{installationId}/now/all/power',
@@ -42,8 +44,17 @@ try {
         'today.selfSufficiency' => '/api/v1/installation/{installationId}/total/selfSufficiency' . $dayQuery,
         'today.selfConsumption' => '/api/v1/installation/{installationId}/total/selfConsumption' . $dayQuery,
         'today.saving' => '/api/v2/installation/{installationId}/saving' . $dayQuery,
+        'history.common.power' => '/api/v1/installation/{installationId}/history/common/power' . $dayQuery,
+        'history.common.work' => '/api/v1/installation/{installationId}/history/common/work' . $dayQuery,
+        'history.consumption.power' => '/api/v1/installation/{installationId}/history/consumption/power' . $dayQuery,
+        'history.consumption.work' => '/api/v1/installation/{installationId}/history/consumption/work' . $dayQuery,
+        'history.gridDraw.work' => '/api/v1/installation/{installationId}/history/gridDraw/work' . $dayQuery,
         'history.batterySoc' => '/api/v1/installation/{installationId}/history/stateOfCharge'
             . '?date=' . rawurlencode(date(DATE_ATOM)) . '&period=day&resolution=15m',
+        'history.electricityPrice' => '/api/v1/installation/{installationId}/electricityPrice'
+            . '?from=' . rawurlencode($todayStart)
+            . '&to=' . rawurlencode($tomorrowStart)
+            . '&resolution=15m',
         'settings.battery' => '/api/v1/installation/{installationId}/hems/setting/battery',
         'settings.emergencyPower' => '/api/v1/installation/{installationId}/hems_setting/emergency_power',
         'settings.energyTariff' => '/api/v1/installation/{installationId}/hems/energyTariff',
@@ -227,7 +238,15 @@ function printSelectionHelp(array $endpoints): void
     echo '  today-saving-emissions       Emissionswerte' . PHP_EOL;
     echo '  today-saving-emissions-factor  Emissionsfaktor' . PHP_EOL;
     echo '  today-saving-emissions-total   gesamte Emissionseinsparung' . PHP_EOL;
+    echo '  PFAD JJJJ-MM-TT     Tageswert eines bestimmten Datums,' . PHP_EOL;
+    echo '                       z.B. today.saving.energy 2026-07-18' . PHP_EOL;
     echo '  soc-history          heutiger Batterie-SoC-Verlauf' . PHP_EOL;
+    echo '  history.common.power       allgemeiner Leistungsverlauf' . PHP_EOL;
+    echo '  history.common.work        allgemeiner Energieverlauf' . PHP_EOL;
+    echo '  history.consumption.power  Leistungsverlauf der Verbraucher' . PHP_EOL;
+    echo '  history.consumption.work   Energieverlauf der Verbraucher' . PHP_EOL;
+    echo '  history.gridDraw.work      Verlauf des Netzbezugs' . PHP_EOL;
+    echo '  history.electricityPrice   Strompreisverlauf in 15 Minuten' . PHP_EOL;
     echo '  battery-settings     Batterieeinstellungen' . PHP_EOL;
     echo '  devices              Geraeteliste' . PHP_EOL;
     echo '  device UUID          bestimmtes Geraet anhand einer beliebigen UUID' . PHP_EOL;

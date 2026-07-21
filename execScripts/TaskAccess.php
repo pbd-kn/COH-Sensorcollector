@@ -487,19 +487,28 @@ final class AmpereIqHttpAccess
      *   $client->getValue('today.work');
      *   $client->getValue('today.work.consumation');
      *   $client->getValue('today-saving-total');
+     *   $client->getValue('today.saving.energy', '2026-07-18');
      *
      * Einzelpfade liefern direkt den skalaren Wert. Bereichsnamen liefern die
      * vollstaendige JSON-Antwort als Array. Es muss kein Export-Script geladen
      * werden; die Funktion gehoert direkt zu AmpereIqHttpAccess.
      */
-    public function getValue(string $selection): mixed
+    public function getValue(string $selection, ?string $date = null): mixed
     {
         $selection = ltrim(trim($selection), "\xEF\xBB\xBF");
         if ($selection === '') {
             throw new InvalidArgumentException('Ampere.IQ-Auswahl fehlt.');
         }
 
-        $endpoints = $this->valueEndpoints();
+        // In der interaktiven Schleife darf das Datum direkt hinter dem Pfad
+        // stehen: "today.saving.energy 2026-07-18".
+        if ($date === null && preg_match('/^(.+?)\s+(\d{4}-\d{2}-\d{2})$/', $selection, $matches)) {
+            $selection = trim($matches[1]);
+            $date = $matches[2];
+        }
+        $date = $this->normalizeValueDate($date);
+
+        $endpoints = $this->valueEndpoints($date);
         $aliases = $this->valueAliases();
         $lower = strtolower($selection);
         $selection = $aliases[$lower] ?? $selection;
@@ -549,17 +558,29 @@ final class AmpereIqHttpAccess
     }
 
     /** @return array<string, string> */
-    private function valueEndpoints(): array
+    private function valueEndpoints(string $date): array
     {
-        $dayQuery = '?period=day&date=' . rawurlencode(date('Y-m-d'));
+        $dayQuery = '?period=day&date=' . rawurlencode($date);
+        $historyDay = new DateTimeImmutable($date);
+        $historyDate = $historyDay->format(DATE_ATOM);
+        $historyTomorrow = $historyDay->modify('+1 day')->format(DATE_ATOM);
         return [
             'live' => '/api/v1/installation/{installationId}/now/all/power',
             'today.work' => '/api/v1/installation/{installationId}/total/common/work' . $dayQuery,
             'today.selfSufficiency' => '/api/v1/installation/{installationId}/total/selfSufficiency' . $dayQuery,
             'today.selfConsumption' => '/api/v1/installation/{installationId}/total/selfConsumption' . $dayQuery,
             'today.saving' => '/api/v2/installation/{installationId}/saving' . $dayQuery,
+            'history.common.power' => '/api/v1/installation/{installationId}/history/common/power' . $dayQuery,
+            'history.common.work' => '/api/v1/installation/{installationId}/history/common/work' . $dayQuery,
+            'history.consumption.power' => '/api/v1/installation/{installationId}/history/consumption/power' . $dayQuery,
+            'history.consumption.work' => '/api/v1/installation/{installationId}/history/consumption/work' . $dayQuery,
+            'history.gridDraw.work' => '/api/v1/installation/{installationId}/history/gridDraw/work' . $dayQuery,
             'history.batterySoc' => '/api/v1/installation/{installationId}/history/stateOfCharge'
-                . '?date=' . rawurlencode(date(DATE_ATOM)) . '&period=day&resolution=15m',
+                . '?date=' . rawurlencode($historyDate) . '&period=day&resolution=15m',
+            'history.electricityPrice' => '/api/v1/installation/{installationId}/electricityPrice'
+                . '?from=' . rawurlencode($historyDate)
+                . '&to=' . rawurlencode($historyTomorrow)
+                . '&resolution=15m',
             'settings.battery' => '/api/v1/installation/{installationId}/hems/setting/battery',
             'settings.emergencyPower' => '/api/v1/installation/{installationId}/hems_setting/emergency_power',
             'settings.energyTariff' => '/api/v1/installation/{installationId}/hems/energyTariff',
@@ -567,6 +588,18 @@ final class AmpereIqHttpAccess
             'devices' => '/api/v1/installation/{installationId}/hems/device',
             'electricVehicles' => '/api/v1/installation/{installationId}/hems/ev',
         ];
+    }
+
+    private function normalizeValueDate(?string $date): string
+    {
+        $date = trim((string)($date ?? date('Y-m-d')));
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        $errors = DateTimeImmutable::getLastErrors();
+        if ($parsed === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+            || $parsed->format('Y-m-d') !== $date) {
+            throw new InvalidArgumentException("Ungueltiges Datum '$date'. Erwartet wird JJJJ-MM-TT.");
+        }
+        return $date;
     }
 
     /** @return array<string, string> */
@@ -603,6 +636,18 @@ final class AmpereIqHttpAccess
             'today-saving-emissions-total' => 'today.saving.emissions.total',
             'soc-history' => 'history.batterySoc',
             'batterie-verlauf' => 'history.batterySoc',
+            'history-power' => 'history.common.power',
+            'leistungsverlauf' => 'history.common.power',
+            'history-work' => 'history.common.work',
+            'energieverlauf' => 'history.common.work',
+            'history-consumption-power' => 'history.consumption.power',
+            'verbrauchsleistung-verlauf' => 'history.consumption.power',
+            'history-consumption-work' => 'history.consumption.work',
+            'verbrauchsenergie-verlauf' => 'history.consumption.work',
+            'history-grid-draw' => 'history.gridDraw.work',
+            'netzbezug-verlauf' => 'history.gridDraw.work',
+            'history-electricity-price' => 'history.electricityPrice',
+            'strompreis-verlauf' => 'history.electricityPrice',
             'battery-settings' => 'settings.battery',
             'batterie-einstellungen' => 'settings.battery',
             'notstrom' => 'settings.emergencyPower',
