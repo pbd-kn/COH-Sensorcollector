@@ -6,6 +6,7 @@ use PbdKn\cohSensorcollector\SimpleHttpClient;
 use PbdKn\cohSensorcollector\Logger;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\mysql_dialog;
+use PbdKn\cohSensorcollector\BundleSettings;
 
 class IQBoxSensorService implements SensorFetcherInterface
 {
@@ -62,7 +63,12 @@ class IQBoxSensorService implements SensorFetcherInterface
                     // wird frisch gelesen, aber immer ueber denselben Cloud-Client.
                     $cloudValue = $cloud->getValue($sensorLokalId);
                 } catch (\Throwable $e) {
-                    $this->logger->Error("IQBox Cloud: Fehler bei $sensorLokalId: " . $e->getMessage());
+                    $origin = $e->getFile() . ':' . $e->getLine();
+                    $previous = $e->getPrevious();
+                    if ($previous !== null) {
+                        $origin .= ' (Ursprung: ' . $previous->getFile() . ':' . $previous->getLine() . ')';
+                    }
+                    $this->logger->Error("IQBox Cloud: Fehler bei $sensorLokalId: " . $e->getMessage() . " [$origin]");
                     continue;
                 }
 
@@ -99,14 +105,23 @@ class IQBoxSensorService implements SensorFetcherInterface
             return $this->cloud;
         }
 
-        $execScriptsDir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'execScripts';
+        $bundleDir = dirname(__DIR__, 2);
+        $execScriptsDir = $bundleDir . DIRECTORY_SEPARATOR . 'execScripts';
         require_once $execScriptsDir . DIRECTORY_SEPARATOR . 'TaskAccess.php';
+        $settings = new BundleSettings($this->db);
+        $ampereIq = $settings->ampereIq();
+        $parameters = ['ampereIq' => $ampereIq];
 
         $this->cloud = new \AmpereIqHttpAccess(
-            $execScriptsDir . DIRECTORY_SEPARATOR . 'task_solar_params.json',
-            3,                  // anzahl Versuche
-            10,                 // wartezeit zwischen den Verwsuchn
-            \TaskAccess::loggerAdapter($this->logger)   //logger übergabe
+            '',
+            max(1, (int)($ampereIq['retries'] ?? 3)),
+            max(0, (int)($ampereIq['retryDelay'] ?? 10)),
+            \TaskAccess::loggerAdapter($this->logger),
+            (int)($ampereIq['lifetimeCacheSeconds'] ?? 60),
+            $parameters,
+            static function (array $tokens) use ($settings): void {
+                $settings->saveAmpereTokens($tokens);
+            }
         );
 
         return $this->cloud;

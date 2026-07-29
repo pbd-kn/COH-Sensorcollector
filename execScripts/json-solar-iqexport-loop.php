@@ -238,6 +238,12 @@ function printSelectionHelp(array $endpoints): void
     echo '  today-saving-emissions       Emissionswerte' . PHP_EOL;
     echo '  today-saving-emissions-factor  Emissionsfaktor' . PHP_EOL;
     echo '  today-saving-emissions-total   gesamte Emissionseinsparung' . PHP_EOL;
+    echo '  lifetime.pvProduction  gesamte PV-Erzeugung seit Anlagenbeginn' . PHP_EOL;
+    echo '  lifetime.work          alle Gesamtenergien seit Anlagenbeginn' . PHP_EOL;
+    echo '  lifetime 2025          Gesamtenergien eines bestimmten Jahres' . PHP_EOL;
+    echo '  lifetime.work 2025     komplette Energiewerte eines Jahres' . PHP_EOL;
+    echo '  lifetime.pvProduction 2025  PV-Erzeugung eines Jahres' . PHP_EOL;
+    echo '  year.work JJJJ-MM-TT   Jahreswerte des angegebenen Jahres' . PHP_EOL;
     echo '  PFAD JJJJ-MM-TT     Tageswert eines bestimmten Datums,' . PHP_EOL;
     echo '                       z.B. today.saving.energy 2026-07-18' . PHP_EOL;
     echo '  soc-history          heutiger Batterie-SoC-Verlauf' . PHP_EOL;

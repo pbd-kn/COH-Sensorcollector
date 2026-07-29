@@ -53,6 +53,61 @@ $gridDraw = $iq->getValue('history.gridDraw.work', '2026-07-18');
 $prices = $iq->getValue('history.electricityPrice', '2026-07-18');
 ```
 
+Gesamtwerte seit Anlagebeginn werden aus den Cloud-Jahreswerten summiert:
+
+```php
+$pvTotalWh = $iq->getValue('lifetime.pvProduction');
+$allTotals = $iq->getValue('lifetime.work');
+$pvTotalKwh = $pvTotalWh / 1000;
+```
+
+Fuer eigenstaendige Tasks wird die Cachezeit in `task_solar_params.json`
+eingestellt:
+
+```json
+{
+    "ampereIq": {
+        "lifetimeCacheSeconds": 60,
+        "lifetimeRetries": 3,
+        "lifetimeRetryDelaySeconds": 2
+    }
+}
+```
+
+Alternativ kann ein Task den Wert in seinem Abschnitt `ampereIqCloud`
+ueberschreiben. `0` deaktiviert den Cache, `300` entspricht fuenf Minuten.
+
+`lifetimeRetries` und `lifetimeRetryDelaySeconds` steuern in der interaktiven
+Testloop die Wiederholungen bei einem voruebergehenden Cloud-Timeout.
+
+## Bundle-Sensor
+
+`IQBoxSensorService` und `HeizstabSensorService` lesen ihre Einstellungen aus
+dem Contao-Backendmodul `COH-Sensorcollector Einstellungen`. Der Datensatz wird
+in `tl_coh_sensorcollector_settings` gespeichert und deshalb bei Installationen
+und Updates ueber den Contao Manager nicht ueberschrieben. Aktualisierte
+Ampere.IQ-Tokens werden ebenfalls dort gespeichert.
+
+Nach der Bundle-Installation ist einmal die Datenbankmigration im Contao
+Manager auszufuehren und danach im Backend genau ein Einstellungsdatensatz
+anzulegen. Ein manueller Upload per FTP/FileZilla ist nicht erforderlich.
+
+Unter `contao/config` werden keine Sensor-Parameterdateien mehr ausgeliefert
+oder gelesen. Fehlt der Datenbankdatensatz, bricht der jeweilige Sensorservice
+mit einem eindeutigen Konfigurationsfehler ab. Die JSON-Dateien unter
+`execScripts` gehoeren nur zu den eigenstaendigen Test- und Taskprogrammen,
+die ausserhalb von Contao laufen.
+
+Ein bestimmtes Jahr kann als Teil der Auswahl oder als zweiter Parameter
+angegeben werden. Diese Schreibweise eignet sich auch direkt als
+`sensorLokalId` im IQBox-Sensor:
+
+```php
+$pv2025 = $iq->getValue('lifetime.pvProduction 2025');
+$work2025 = $iq->getValue('lifetime.work 2025');
+$pv2025Alternative = $iq->getValue('lifetime.pvProduction', '2025');
+```
+
 Ein Schreibzugriff auf einen bekannten Endpunkt ist ebenfalls generisch moeglich:
 
 ```php

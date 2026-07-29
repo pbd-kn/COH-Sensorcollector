@@ -55,6 +55,7 @@
                           "enabled":  true,
                           "paramsFile":  "task_solar_params.json",
                           "retries":  3,
-                          "retryDelay":  10
+                          "retryDelay":  10,
+                          "lifetimeCacheSeconds":  60
                       }
 }

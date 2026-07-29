@@ -1,0 +1,12 @@
+{
+  "mode": "local",
+  "timeout": 15,
+  "local": {
+    "deviceUrl": "http://192.168.178.69"
+  },
+  "http": {
+    "baseUrl": "http://192.168.178.49",
+    "path": "/api/coh/tasmota.php",
+    "token": "COH_CODE"
+  }
+}

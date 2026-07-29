@@ -113,6 +113,18 @@ class TasmotaSensorService implements SensorFetcherInterface
                 $this->logger->debugMe('Tasmota Sensorservice  lese  '.$sensor['sensorID']);
                 $lokalAccess=$sensor['sensorID'];
                 if (!empty($sensor['sensorLokalId'])) $lokalAccess=$sensor['sensorLokalId'];
+
+                if (strcasecmp((string)$sensor['sensorID'], 'tasmota.akt') === 0
+                    || strcasecmp((string)$lokalAccess, 'tasmota.akt') === 0) {
+                    $res[$sensor['sensorID']] = [
+                        'sensorID' => $sensor['sensorID'],
+                        'sensorValue' => $this->dataFromDevice,
+                        'sensorEinheit' => $sensor['sensorEinheit'],
+                        'sensorValueType' => $sensor['sensorValueType'],
+                        'sensorSource' => $sensor['sensorSource'],
+                    ];
+                    continue;
+                }
     
                 if (isset($this->dataFromDevice['StatusSNS']['M60'][$lokalAccess])) {
                     $value = $this->dataFromDevice['StatusSNS']['M60'][$lokalAccess];

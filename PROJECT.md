@@ -56,6 +56,30 @@ enthaelt keine Regelungslogik und keine Auswahl einzelner Messwerte.
 
 `json-solar-iq-loop.php` ist nur ein eigenstaendiges interaktives
 Testprogramm. Es wird von der Regelung und von `TaskAccess.php` nicht geladen.
+Die Testloop stellt auch die berechneten Filter `lifetime`, `lifetime.work` und
+`lifetime.pvProduction` bereit. Hierfuer werden die Cloud-Jahreswerte seit dem
+Anlagedatum erst beim ersten Lifetime-Filter geladen und anschliessend fuer die
+laufende Testloop wiederverwendet. Die Cloud bietet keinen einzelnen
+Lifetime-Endpunkt an. Auch `AmpereIqHttpAccess` laedt diese Jahreswerte erst beim
+ersten Lifetime-Sensor und cached sie fuer weitere Sensoren derselben
+Client-Instanz fuer 60 Sekunden. Dadurch teilen sich Sensoren einer Sammelrunde
+die Abrufe, waehrend ein spaeteres Pollintervall wieder aktuelle Jahreswerte
+erhaelt.
+Die Dauer wird fuer eigenstaendige Tasks mit `ampereIq.lifetimeCacheSeconds`
+in `execScripts/task_solar_params.json` gepflegt. Tasks koennen sie ueber
+`ampereIqCloud.lifetimeCacheSeconds` ueberschreiben.
+Die Bundle-Sensoren beziehen ihre Parameter dagegen aus dem Backendmodul
+`Sensorcollector-Einstellungen` des ContaoHab-Bundles. Die Werte liegen in der Datenbanktabelle
+`tl_coh_sensorcollector_settings` und bleiben bei Bundle-Updates erhalten.
+Unter `contao/config` liegen keine Sensor-Parameterdateien. Fehlt der
+Einstellungsdatensatz, meldet der Sensorservice deshalb einen eindeutigen
+Konfigurationsfehler.
+Mit einer angehaengten Jahreszahl, zum Beispiel `lifetime.pvProduction 2025`,
+wird nur dieses Jahr gelesen. Dieselbe Auswahl kann als `sensorLokalId` eines
+IQBox-Sensors verwendet werden.
+Auch der normale Cloud-Snapshot der Testloop wird nicht mehr beim Programmstart
+geladen. Der Prompt erscheint nach der Anmeldung sofort; ein freier Suchfilter
+laedt den Snapshot einmalig. Direkte Befehle laden nur ihren jeweiligen Bereich.
 
 ## Gemeinsame Zugriffe
 
@@ -94,6 +118,20 @@ Die Parameterdateien liegen in `execScripts`:
 
 Passwoerter und Token duerfen nicht in Dokumentation, Quellcodeausgaben oder
 Git-Commits uebernommen werden.
+
+## Installation und Updates mit dem Contao Manager
+
+Nach der Installation oder Aktualisierung des Bundles wird im Contao Manager
+die Datenbankmigration ausgefuehrt. Dadurch entsteht die Tabelle
+`tl_coh_sensorcollector_settings`. Danach im Contao-Backend unter
+`COH > COH-Sensorcollector Einstellungen` genau einen Datensatz anlegen und
+die Ampere.IQ- sowie Heizstab-Zugangsdaten eintragen.
+
+Bei spaeteren Bundle-Updates bleibt dieser Datensatz erhalten. Es muessen keine
+Parameterdateien per FTP/FileZilla hochgeladen werden. Erneuerte Ampere.IQ-
+OAuth-Tokens speichert der Sensorservice automatisch wieder in diesem
+Datensatz. Das Bundle installiert keine Sensor-Parameterdateien unter
+`contao/config`.
 
 ## Dateien fuer den Raspberry Pi
 

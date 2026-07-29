@@ -5,7 +5,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 $API_TOKEN = 'COH_CODE';
 $DB = [ 'host' => '127.0.0.1', 'port' => 3306, 'user' => 'peter', 'pass' => 'sql666sql','db'   => 'co5_solar', ];
-$allowedTables = ['tl_coh_sensors','tl_coh_cfgcollect','tl_coh_geraete'];
+$allowedTables = ['tl_coh_sensors','tl_coh_cfgcollect','tl_coh_geraete','tl_coh_sensorcollector_settings'];
 
 // ---------------- AUTH ----------------
 $token = $_SERVER['HTTP_X_COH_TOKEN'] ?? ($_GET['token'] ?? '');

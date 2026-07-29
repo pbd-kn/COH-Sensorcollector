@@ -4,6 +4,7 @@ namespace PbdKn\cohSensorcollector\Sensor;
 
 use PbdKn\cohSensorcollector\Logger;
 use PbdKn\cohSensorcollector\mysql_dialog;
+use PbdKn\cohSensorcollector\BundleSettings;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\SimpleHttpClient;
 
@@ -13,13 +14,15 @@ class HeizstabSensorService implements SensorFetcherInterface
     private ?array $setupData = null;
     private string $heizstabCookieFile = '/home/peter/scripts/coh/cookies/heizstab_cookie.txt';
     private string $loginPath = '/auth.jsn';
-    private string $password = '14881488';
+    private string $password = '';
     private string $passwordField = 'pw';
     private bool $insecureTls = true;
     private string $cloudApiBaseUrl = 'https://api.my-pv.com/api/v1';
+    private string $configuredAccess = '';
 
     public function __construct(private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient)
     {
+        $this->loadBundleParameters();
     }
 
     public function supports($sensor): bool
@@ -42,6 +45,9 @@ class HeizstabSensorService implements SensorFetcherInterface
             if (count($sensors) > 0) {
                 $access = trim((string)($sensors[0]['geraeteUrl'] ?? ''));
                 $this->logger->debugMe('Heizstab Sensorservice Zugriff aus erster geraeteUrl len sensors:' . count($sensors));
+            }
+            if ($access === '') {
+                $access = $this->configuredAccess;
             }
 
             if ($access === '') {
@@ -242,7 +248,7 @@ class HeizstabSensorService implements SensorFetcherInterface
 
     private function getDataFromCloudApi(string $serial, string $apiKey)
     {
-        $this->logger->debugMe("Heizstab Sensorservice getDataFromCloudApi serial $serial apiKey $apiKey");    
+        $this->logger->debugMe("Heizstab Sensorservice getDataFromCloudApi serial $serial");
         $v1 = $this->cloudApiGetJson($serial, $apiKey, 'data');
         $v2 = $this->cloudApiGetJson($serial, $apiKey, 'setup');
         if ($v1 === null || $v2 === null) {
@@ -417,6 +423,35 @@ class HeizstabSensorService implements SensorFetcherInterface
 
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
+
+    private function loadBundleParameters(): void
+    {
+        $parameters = (new BundleSettings($this->db))->heatingRod();
+
+        $auth = is_array($parameters['heizstabAuth'] ?? null) ? $parameters['heizstabAuth'] : [];
+        $api = is_array($parameters['heizstabApi'] ?? null) ? $parameters['heizstabApi'] : [];
+        $this->loginPath = (string)($auth['loginPath'] ?? $this->loginPath);
+        $this->password = (string)($auth['password'] ?? '');
+        $this->passwordField = (string)($auth['passwordField'] ?? $this->passwordField);
+        $this->insecureTls = !empty($auth['insecureTls']);
+        $cookieFile = trim((string)($auth['cookieFile'] ?? ''));
+        if ($cookieFile === '' && !empty($auth['cookieDir'])) {
+            $cookieFile = rtrim((string)$auth['cookieDir'], '/\\')
+                . DIRECTORY_SEPARATOR . 'heizstab_cookie.txt';
+        }
+        if ($cookieFile !== '') {
+            $this->heizstabCookieFile = $cookieFile;
+        }
+        $this->cloudApiBaseUrl = rtrim((string)($api['baseUrl'] ?? $this->cloudApiBaseUrl), '/');
+
+        $serial = trim((string)($api['serial'] ?? ''));
+        $apiToken = trim((string)($api['apiToken'] ?? ''));
+        if (!empty($api['enabled']) && $serial !== '' && $apiToken !== '') {
+            $this->configuredAccess = $serial . ':' . $apiToken;
+        } elseif (!empty($auth['enabled'])) {
+            $this->configuredAccess = trim((string)($parameters['urlheizStab'] ?? ''));
+        }
     }
 
     private function getHeizstabdata($sensorID)

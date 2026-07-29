@@ -234,9 +234,12 @@ function runCloudLoop(array $context): void
     echo 'Ampere.IQ Cloud: ' . API_BASE_URL . PHP_EOL;
     echo 'Installation: ' . $context['installationId'] . PHP_EOL;
 
-    $rawData = loadCloudSnapshot($context['installationId'], $context['accessToken']);
-    $items = flattenCloudData($rawData);
-    echo 'Cloud-Werte geladen: ' . count($items) . PHP_EOL;
+    $rawData = [];
+    $items = [];
+    $snapshotLoaded = false;
+    $lifetimeLoaded = false;
+    $lifetimeLoadedAt = 0;
+    echo 'Bereit. Cloud-Werte werden erst bei Bedarf geladen (Lazy Loading).' . PHP_EOL;
     printCloudHelp();
 
     while (true) {
@@ -266,24 +269,33 @@ function runCloudLoop(array $context): void
         }
         if (in_array($lower, ['r', 'reload'], true)) {
             $context = createCloudContext($context['tokenFile']);
-            $rawData = loadCloudSnapshot($context['installationId'], $context['accessToken']);
-            $items = flattenCloudData($rawData);
-            echo 'Cloud-Werte neu geladen: ' . count($items) . PHP_EOL;
+            $rawData = [];
+            $items = [];
+            $snapshotLoaded = false;
+            $lifetimeLoaded = false;
+            $lifetimeLoadedAt = 0;
+            echo 'Cache geleert. Werte werden beim naechsten passenden Befehl neu geladen.' . PHP_EOL;
             continue;
         }
         if (in_array($lower, ['login', 'relogin'], true)) {
             $context = createCloudContext($context['tokenFile'], true);
-            $rawData = loadCloudSnapshot($context['installationId'], $context['accessToken']);
-            $items = flattenCloudData($rawData);
-            echo 'Login und Laden erledigt.' . PHP_EOL;
+            $rawData = [];
+            $items = [];
+            $snapshotLoaded = false;
+            $lifetimeLoaded = false;
+            $lifetimeLoadedAt = 0;
+            echo 'Login erledigt. Werte werden erst bei Bedarf geladen.' . PHP_EOL;
             continue;
         }
         if ($lower === 'password-login') {
             passwordLogin($context['tokenFile'], getLoginFile());
             $context = createCloudContext($context['tokenFile']);
-            $rawData = loadCloudSnapshot($context['installationId'], $context['accessToken']);
-            $items = flattenCloudData($rawData);
-            echo 'Automatischer Login und Laden erledigt.' . PHP_EOL;
+            $rawData = [];
+            $items = [];
+            $snapshotLoaded = false;
+            $lifetimeLoaded = false;
+            $lifetimeLoadedAt = 0;
+            echo 'Automatischer Login erledigt. Werte werden erst bei Bedarf geladen.' . PHP_EOL;
             continue;
         }
         if ($lower === 'soc') {
@@ -333,9 +345,74 @@ function runCloudLoop(array $context): void
             continue;
         }
         if (in_array($lower, ['raw', 'json'], true)) {
+            if (!$snapshotLoaded) {
+                echo 'Cloud-Snapshot wird jetzt einmalig geladen ...' . PHP_EOL;
+                $snapshot = loadCloudSnapshot($context['installationId'], $context['accessToken']);
+                $rawData = $lifetimeLoaded && isset($rawData['lifetime'])
+                    ? array_replace($snapshot, ['lifetime' => $rawData['lifetime']])
+                    : $snapshot;
+                $items = flattenCloudData($rawData);
+                $snapshotLoaded = true;
+            }
             $file = writeCloudRawJson($rawData);
             echo "Raw JSON gespeichert: $file" . PHP_EOL;
             continue;
+        }
+
+        if (preg_match('/^lifetime(?:\.(work|pvproduction))?\s+(\d{4})$/i', $filter, $matches)) {
+            $kind = strtolower((string)($matches[1] ?? 'work'));
+            $year = (int)$matches[2];
+            try {
+                $yearWork = loadLifetimeWork($context['installationId'], $context['accessToken'], $year);
+                if ($kind === 'pvproduction') {
+                    echo json_encode($yearWork['generation'], JSON_UNESCAPED_SLASHES) . PHP_EOL;
+                } else {
+                    printJson($yearWork);
+                }
+            } catch (Throwable $e) {
+                echo 'WARNUNG: ' . $e->getMessage() . PHP_EOL;
+            }
+            continue;
+        }
+
+        $lifetimeConfig = loadLifetimeRetryConfig();
+        if ($lifetimeLoaded && str_contains($lower, 'lifetime')
+            && time() - $lifetimeLoadedAt >= $lifetimeConfig['cacheSeconds']) {
+            unset($rawData['lifetime']);
+            $lifetimeLoaded = false;
+            $lifetimeLoadedAt = 0;
+        }
+        if (!$lifetimeLoaded && str_contains($lower, 'lifetime')) {
+            echo 'Lifetime-Werte werden jetzt einmalig aus den Jahreswerten geladen '
+                . '(Cache: ' . $lifetimeConfig['cacheSeconds'] . ' s, max. Versuche: '
+                . $lifetimeConfig['retries'] . ', Pause: ' . $lifetimeConfig['delaySeconds'] . ' s) ...'
+                . PHP_EOL;
+            try {
+                $lifetimeWork = loadLifetimeWork($context['installationId'], $context['accessToken']);
+                $rawData['lifetime'] = [
+                    'pvProduction' => $lifetimeWork['generation'],
+                    'work' => $lifetimeWork,
+                ];
+                unset($rawData['_errors']['lifetime']);
+                $lifetimeLoaded = true;
+                $lifetimeLoadedAt = time();
+            } catch (Throwable $e) {
+                $rawData['_errors']['lifetime'] = $e->getMessage();
+                $lifetimeLoaded = false;
+                $lifetimeLoadedAt = 0;
+            }
+            $items = flattenCloudData($rawData);
+        }
+
+        if (!str_contains($lower, 'lifetime') && !$snapshotLoaded) {
+            echo 'Cloud-Snapshot wird jetzt einmalig fuer die Suche geladen ...' . PHP_EOL;
+            $snapshot = loadCloudSnapshot($context['installationId'], $context['accessToken']);
+            $rawData = $lifetimeLoaded && isset($rawData['lifetime'])
+                ? array_replace($snapshot, ['lifetime' => $rawData['lifetime']])
+                : $snapshot;
+            $items = flattenCloudData($rawData);
+            $snapshotLoaded = true;
+            echo 'Cloud-Werte geladen: ' . count($items) . PHP_EOL;
         }
 
         printCloudItems($items, $filter);
@@ -399,6 +476,114 @@ function loadCloudSnapshot(string $installationId, string $accessToken): array
     }
 
     return $result;
+}
+
+function loadLifetimeWork(string $installationId, string $accessToken, ?int $onlyYear = null): array
+{
+    $retryConfig = loadLifetimeRetryConfig();
+    $installations = apiGetWithRetry(
+        '/api/v1/installation',
+        $accessToken,
+        $retryConfig['retries'],
+        $retryConfig['delaySeconds']
+    );
+    $createdAt = null;
+    foreach ($installations as $installation) {
+        if (is_array($installation) && (string)($installation['id'] ?? '') === $installationId) {
+            $createdAt = trim((string)($installation['createdAt'] ?? ''));
+            break;
+        }
+    }
+    if ($createdAt === '') {
+        $createdAt = null;
+    }
+
+    $startYear = $createdAt !== null ? (int)substr($createdAt, 0, 4) : (int)date('Y');
+    $currentYear = (int)date('Y');
+    if ($startYear < 2000 || $startYear > $currentYear) {
+        throw new RuntimeException('Startjahr der Ampere.IQ-Anlage ist ungueltig.');
+    }
+    if ($onlyYear !== null && ($onlyYear < $startYear || $onlyYear > $currentYear)) {
+        throw new InvalidArgumentException(
+            "Jahr $onlyYear liegt ausserhalb des Anlagenzeitraums $startYear bis $currentYear."
+        );
+    }
+
+    $fields = ['generation', 'consumption', 'batteryFeed', 'batteryDraw', 'gridFeed', 'gridDraw'];
+    $totals = array_fill_keys($fields, 0.0);
+    $years = [];
+    $id = rawurlencode($installationId);
+    $firstYear = $onlyYear ?? $startYear;
+    $lastYear = $onlyYear ?? $currentYear;
+    for ($year = $firstYear; $year <= $lastYear; $year++) {
+        $path = "/api/v1/installation/$id/total/common/work"
+            . queryString(['period' => 'year', 'date' => $year . '-07-01']);
+        $values = apiGetWithRetry(
+            $path,
+            $accessToken,
+            $retryConfig['retries'],
+            $retryConfig['delaySeconds']
+        );
+        $years[(string)$year] = $values;
+        foreach ($fields as $field) {
+            if (is_numeric($values[$field] ?? null)) {
+                $totals[$field] += (float)$values[$field];
+            }
+        }
+    }
+
+    $result = $totals + [
+        'unit' => 'Wh',
+        'createdAt' => $createdAt,
+        'throughDate' => $onlyYear === null || $onlyYear === $currentYear
+            ? date('Y-m-d')
+            : $onlyYear . '-12-31',
+        'years' => $years,
+    ];
+    if ($onlyYear !== null) {
+        $result['year'] = $onlyYear;
+    }
+    return $result;
+}
+
+function loadLifetimeRetryConfig(): array
+{
+    $defaults = ['cacheSeconds' => 60, 'retries' => 3, 'delaySeconds' => 2];
+    $file = __DIR__ . DIRECTORY_SEPARATOR . 'task_solar_params.json';
+    if (!is_file($file)) {
+        return $defaults;
+    }
+    $parameters = json_decode((string)file_get_contents($file), true);
+    $ampereIq = is_array($parameters['ampereIq'] ?? null) ? $parameters['ampereIq'] : [];
+    return [
+        'cacheSeconds' => max(0, (int)($ampereIq['lifetimeCacheSeconds'] ?? $defaults['cacheSeconds'])),
+        'retries' => max(1, (int)($ampereIq['lifetimeRetries'] ?? $defaults['retries'])),
+        'delaySeconds' => max(0, (int)($ampereIq['lifetimeRetryDelaySeconds'] ?? $defaults['delaySeconds'])),
+    ];
+}
+
+function apiGetWithRetry(string $path, string $accessToken, int $retries, int $delaySeconds): array
+{
+    $lastError = null;
+    for ($attempt = 1; $attempt <= $retries; $attempt++) {
+        try {
+            return apiGet($path, $accessToken);
+        } catch (Throwable $error) {
+            $lastError = $error;
+            if ($attempt < $retries) {
+                echo "WARNUNG: Cloud-Abruf fehlgeschlagen ($attempt/$retries), neuer Versuch"
+                    . ($delaySeconds > 0 ? " in $delaySeconds Sekunden" : '') . ' ...' . PHP_EOL;
+                if ($delaySeconds > 0) {
+                    sleep($delaySeconds);
+                }
+            }
+        }
+    }
+    throw new RuntimeException(
+        "Cloud-Abruf nach $retries Versuchen fehlgeschlagen: " . ($lastError?->getMessage() ?? 'unbekannter Fehler'),
+        0,
+        $lastError
+    );
 }
 
 function firstStringField(array $data, array $fieldNames): ?string
@@ -496,6 +681,7 @@ function printCloudHelp(): void
     echo '  text          Pfad und Wert durchsuchen, z.B. battery, temperature oder pvPower' . PHP_EOL;
     echo '  %text%        LIKE-Suche mit % als Platzhalter' . PHP_EOL;
     echo '  r             Cloud-Daten neu laden' . PHP_EOL;
+    echo '                (setzt den Cache zurueck; geladen wird erst beim naechsten Filter)' . PHP_EOL;
     echo '  flow          Energiefluss mit Richtung und verstaendlichen Bezeichnungen anzeigen' . PHP_EOL;
     echo '  day [Datum]   Leistungsverlauf, z.B. day 2026-07-14' . PHP_EOL;
     echo '  day-devices [Datum]  Tagesverlauf nach Haus, Wallbox, Waermepumpe und Heizstab' . PHP_EOL;
@@ -504,6 +690,12 @@ function printCloudHelp(): void
     echo '  day-heatpump [Datum]    nur Waermepumpe' . PHP_EOL;
     echo '  day-wallbox [Datum]     nur Wallbox' . PHP_EOL;
     echo '  day-totals [Datum]   erzeugte, verbrauchte, gespeicherte und Netz-Energie' . PHP_EOL;
+    echo '  lifetime              alle Gesamtwerte seit Anlagebeginn suchen' . PHP_EOL;
+    echo '  lifetime.work         Gesamtenergien mit Aufteilung nach Jahren' . PHP_EOL;
+    echo '  lifetime.pvProduction gesamte PV-Erzeugung seit Anlagebeginn in Wh' . PHP_EOL;
+    echo '  lifetime [Jahr]       Gesamtenergien eines Jahres, z.B. lifetime 2025' . PHP_EOL;
+    echo '  lifetime.work [Jahr]  komplette Energiewerte eines Jahres' . PHP_EOL;
+    echo '  lifetime.pvProduction [Jahr]  PV-Erzeugung eines Jahres in Wh' . PHP_EOL;
     echo '  heizstab temp             Ist-, Solltemperatur und Messzeit anzeigen' . PHP_EOL;
     echo '  heizstab values           alle aktuellen Heizstabwerte anzeigen' . PHP_EOL;
     echo '  heizstab value NAME       genau einen Heizstabwert anzeigen' . PHP_EOL;
@@ -675,6 +867,13 @@ function printApiShortcutHelp(): void
     echo '  api feature-flags    freigeschaltete App-Funktionen anzeigen' . PHP_EOL;
     echo '  /api/live            Kurzbefehle funktionieren auch in dieser Schreibweise' . PHP_EOL;
     echo '  hems/device          wird automatisch um API-Praefix und Installations-ID ergaenzt' . PHP_EOL;
+    echo PHP_EOL . 'Berechnete Gesamtwerte (kein einzelner Cloud-Endpunkt):' . PHP_EOL;
+    echo '  lifetime             alle Lifetime-Werte im geladenen Snapshot suchen' . PHP_EOL;
+    echo '  lifetime.work        Gesamtenergien seit Anlagebeginn' . PHP_EOL;
+    echo '  lifetime.pvProduction gesamte PV-Erzeugung seit Anlagebeginn in Wh' . PHP_EOL;
+    echo '  lifetime 2025        Gesamtenergien nur fuer 2025' . PHP_EOL;
+    echo '  lifetime.work 2025   komplette Energiewerte fuer 2025' . PHP_EOL;
+    echo '  lifetime.pvProduction 2025  PV-Erzeugung nur fuer 2025' . PHP_EOL;
 }
 
 function printApiResponse(string $path, array $data): void

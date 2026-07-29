@@ -441,13 +441,34 @@ final class AmpereIqHttpAccess
     private int $retryDelay;
     private $logger;
     private ?array $context = null;
+    /** Erst beim ersten Lifetime-Sensor laden, danach fuer diese Client-Instanz wiederverwenden. */
+    private array $lifetimeWorkCache = [];
+    private array $lifetimeWorkCacheAt = [];
+    private const DEFAULT_LIFETIME_CACHE_SECONDS = 60;
+    private int $lifetimeCacheSeconds;
+    private ?array $parametersOverride;
+    private $tokensSaver;
 
-    public function __construct(string $paramsFile, int $retries = 3, int $retryDelay = 10, ?callable $logger = null)
+    public function __construct(
+        string $paramsFile,
+        int $retries = 3,
+        int $retryDelay = 10,
+        ?callable $logger = null,
+        ?int $lifetimeCacheSeconds = null,
+        ?array $parametersOverride = null,
+        ?callable $tokensSaver = null
+    )
     {
         $this->paramsFile = $paramsFile;
         $this->retries = max(1, $retries);
         $this->retryDelay = max(0, $retryDelay);
         $this->logger = $logger;
+        $this->parametersOverride = $parametersOverride;
+        $this->tokensSaver = $tokensSaver;
+        $this->lifetimeCacheSeconds = max(
+            0,
+            $lifetimeCacheSeconds ?? $this->loadConfiguredLifetimeCacheSeconds()
+        );
     }
 
     public static function fromTaskParameters(array $parameters, string $baseDir = __DIR__, ?callable $logger = null): self
@@ -469,7 +490,8 @@ final class AmpereIqHttpAccess
             $paramsFile,
             (int)($config['retries'] ?? 3),
             (int)($config['retryDelay'] ?? 10),
-            $logger
+            $logger,
+            isset($config['lifetimeCacheSeconds']) ? (int)$config['lifetimeCacheSeconds'] : null
         );
     }
 
@@ -500,6 +522,15 @@ final class AmpereIqHttpAccess
             throw new InvalidArgumentException('Ampere.IQ-Auswahl fehlt.');
         }
 
+        $lifetimeYear = null;
+        if (preg_match('/^(.+?)\s+(\d{4})$/', $selection, $matches)) {
+            $selection = trim($matches[1]);
+            $lifetimeYear = (int)$matches[2];
+        } elseif ($date !== null && preg_match('/^\d{4}$/', $date)) {
+            $lifetimeYear = (int)$date;
+            $date = null;
+        }
+
         // In der interaktiven Schleife darf das Datum direkt hinter dem Pfad
         // stehen: "today.saving.energy 2026-07-18".
         if ($date === null && preg_match('/^(.+?)\s+(\d{4}-\d{2}-\d{2})$/', $selection, $matches)) {
@@ -526,6 +557,14 @@ final class AmpereIqHttpAccess
                 'selfConsumption' => $this->get($endpoints['today.selfConsumption']),
                 'saving' => $this->get($endpoints['today.saving']),
             ];
+        }
+
+        if (strtolower($selection) === 'lifetime.work') {
+            return $this->getLifetimeWork($lifetimeYear);
+        }
+        if (strtolower($selection) === 'lifetime.pvproduction') {
+            $lifetime = $this->getLifetimeWork($lifetimeYear);
+            return $lifetime['generation'];
         }
 
         if (preg_match('/^(?:device|devices|geraet|geraete)\s+(.+)$/i', $selection, $matches)) {
@@ -570,6 +609,7 @@ final class AmpereIqHttpAccess
             'today.selfSufficiency' => '/api/v1/installation/{installationId}/total/selfSufficiency' . $dayQuery,
             'today.selfConsumption' => '/api/v1/installation/{installationId}/total/selfConsumption' . $dayQuery,
             'today.saving' => '/api/v2/installation/{installationId}/saving' . $dayQuery,
+            'year.work' => '/api/v1/installation/{installationId}/total/common/work?period=year&date=' . rawurlencode($date),
             'history.common.power' => '/api/v1/installation/{installationId}/history/common/power' . $dayQuery,
             'history.common.work' => '/api/v1/installation/{installationId}/history/common/work' . $dayQuery,
             'history.consumption.power' => '/api/v1/installation/{installationId}/history/consumption/power' . $dayQuery,
@@ -634,6 +674,12 @@ final class AmpereIqHttpAccess
             'today-saving-emissions' => 'today.saving.emissions',
             'today-saving-emissions-factor' => 'today.saving.emissions.gramPerWh',
             'today-saving-emissions-total' => 'today.saving.emissions.total',
+            'pv-total' => 'lifetime.pvProduction',
+            'pv-gesamt' => 'lifetime.pvProduction',
+            'total-pv' => 'lifetime.pvProduction',
+            'lifetime-pv' => 'lifetime.pvProduction',
+            'lifetime' => 'lifetime.work',
+            'year-work' => 'year.work',
             'soc-history' => 'history.batterySoc',
             'batterie-verlauf' => 'history.batterySoc',
             'history-power' => 'history.common.power',
@@ -682,6 +728,92 @@ final class AmpereIqHttpAccess
             $cursor = $cursor[$actualKey];
         }
         return $cursor;
+    }
+
+    /**
+     * Die Cloud kennt keinen einzelnen Lifetime-Zeitraum. Deshalb werden die
+     * bestaetigten Jahreswerte ab dem Anlage-Datum bis heute addiert.
+     */
+    private function getLifetimeWork(?int $onlyYear = null): array
+    {
+        $cacheKey = $onlyYear === null ? 'all' : (string)$onlyYear;
+        if (isset($this->lifetimeWorkCache[$cacheKey], $this->lifetimeWorkCacheAt[$cacheKey])
+            && time() - $this->lifetimeWorkCacheAt[$cacheKey] < $this->lifetimeCacheSeconds) {
+            return $this->lifetimeWorkCache[$cacheKey];
+        }
+
+        $installationId = $this->installationId();
+        $installations = $this->get('/api/v1/installation');
+        $createdAt = null;
+        foreach ($installations as $installation) {
+            if (is_array($installation) && (string)($installation['id'] ?? '') === $installationId) {
+                $createdAt = trim((string)($installation['createdAt'] ?? ''));
+                break;
+            }
+        }
+        if ($createdAt === '') {
+            $createdAt = null;
+        }
+        $startYear = $createdAt !== null ? (int)substr($createdAt, 0, 4) : (int)date('Y');
+        $currentYear = (int)date('Y');
+        if ($startYear < 2000 || $startYear > $currentYear) {
+            throw new RuntimeException('Ampere.IQ-Startjahr der Anlage ist ungueltig.');
+        }
+        if ($onlyYear !== null && ($onlyYear < $startYear || $onlyYear > $currentYear)) {
+            throw new InvalidArgumentException(
+                "Ampere.IQ-Jahr $onlyYear liegt ausserhalb des Anlagenzeitraums $startYear bis $currentYear."
+            );
+        }
+
+        $fields = ['generation', 'consumption', 'batteryFeed', 'batteryDraw', 'gridFeed', 'gridDraw'];
+        $totals = array_fill_keys($fields, 0.0);
+        $years = [];
+        $firstYear = $onlyYear ?? $startYear;
+        $lastYear = $onlyYear ?? $currentYear;
+        for ($year = $firstYear; $year <= $lastYear; $year++) {
+            $values = $this->get(
+                '/api/v1/installation/{installationId}/total/common/work?period=year&date=' . $year . '-07-01'
+            );
+            $years[(string)$year] = $values;
+            foreach ($fields as $field) {
+                if (is_numeric($values[$field] ?? null)) {
+                    $totals[$field] += (float)$values[$field];
+                }
+            }
+        }
+
+        $result = $totals + [
+            'unit' => 'Wh',
+            'createdAt' => $createdAt,
+            'throughDate' => $onlyYear === null || $onlyYear === $currentYear
+                ? date('Y-m-d')
+                : $onlyYear . '-12-31',
+            'years' => $years,
+        ];
+        if ($onlyYear !== null) {
+            $result['year'] = $onlyYear;
+        }
+        $this->lifetimeWorkCache[$cacheKey] = $result;
+        $this->lifetimeWorkCacheAt[$cacheKey] = time();
+        return $result;
+    }
+
+    private function loadConfiguredLifetimeCacheSeconds(): int
+    {
+        if (!is_file($this->paramsFile)) {
+            return self::DEFAULT_LIFETIME_CACHE_SECONDS;
+        }
+        $parameters = json_decode((string)file_get_contents($this->paramsFile), true);
+        if (!is_array($parameters)) {
+            return self::DEFAULT_LIFETIME_CACHE_SECONDS;
+        }
+        $ampereIq = is_array($parameters['ampereIq'] ?? null)
+            ? $parameters['ampereIq']
+            : $parameters;
+        $value = $ampereIq['lifetimeCacheSeconds'] ?? null;
+        return is_numeric($value)
+            ? max(0, (int)$value)
+            : self::DEFAULT_LIFETIME_CACHE_SECONDS;
     }
 
     /**
@@ -1078,8 +1210,8 @@ final class AmpereIqHttpAccess
         $curlOptions = $options + [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_CONNECTTIMEOUT => 20,
+            CURLOPT_TIMEOUT => 120,
         ];
         $caFile = $this->resolveCaFile();
         if ($caFile !== null) {
@@ -1117,6 +1249,9 @@ final class AmpereIqHttpAccess
 
     private function loadParameters(): array
     {
+        if ($this->parametersOverride !== null) {
+            return $this->parametersOverride;
+        }
         if (!is_file($this->paramsFile)) {
             throw new RuntimeException("Ampere.IQ-Parameterdatei fehlt: {$this->paramsFile}");
         }
@@ -1142,6 +1277,13 @@ final class AmpereIqHttpAccess
             $parameters['ampereIq'] = [];
         }
         $parameters['ampereIq']['tokens'] = $tokens;
+        if ($this->parametersOverride !== null) {
+            $this->parametersOverride = $parameters;
+            if ($this->tokensSaver !== null) {
+                ($this->tokensSaver)($tokens);
+            }
+            return;
+        }
         $json = json_encode($parameters, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if ($json === false || file_put_contents($this->paramsFile, $json . PHP_EOL, LOCK_EX) === false) {
             throw new RuntimeException("Ampere.IQ-Tokens konnten nicht gespeichert werden: {$this->paramsFile}");

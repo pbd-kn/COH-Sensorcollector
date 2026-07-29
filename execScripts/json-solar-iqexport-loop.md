@@ -78,6 +78,17 @@ history.gridDraw.work 2026-07-18
 history.electricityPrice 2026-07-18
 ```
 
+Gesamtertrag seit Anlagebeginn:
+
+```text
+lifetime.pvProduction
+lifetime.work
+pv-gesamt
+lifetime 2025
+lifetime.work 2025
+lifetime.pvProduction 2025
+```
+
 Im PHP-Code kann dasselbe Datum als zweiter Parameter uebergeben werden:
 
 ```php
