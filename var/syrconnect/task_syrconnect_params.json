@@ -1,0 +1,10 @@
+{
+  "baseUrl": "https://syrconnect.de",
+  "username": "syrpeter",
+  "password": "!Syr456Syr!",
+  "cookieFile": "syrconnect-cookies.txt",
+  "captchaFile": "syrconnect-captcha.png",
+  "outputFile": "syrconnect-cloud-export.json",
+  "timeout": 30,
+  "maxPages": 40
+}
