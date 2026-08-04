@@ -7,6 +7,7 @@ header('Content-Type: application/json; charset=utf-8');
 const COH_API_TOKEN = 'COH_CODE';
 const HEATING_PARAMETERS_FILE = '/home/peter/scripts/coh/execScripts/task_heizstab_params.json';
 const HEATING_LOG_FILE = '/home/peter/coh/logs/heizstabserver.log';
+const BACKUP_LOG_FILE = '/media/peter/USBBACKUP/backup.log';
 const DISK_CHECK_SCRIPTS = [
     '/home/peter/scripts/coh/sensorcollect/Sensor/RaspberryExecScripts/check_disk_usage.sh',
     '/home/peter/scripts/coh/execScripts/check_disk_usage.sh',
@@ -21,7 +22,6 @@ function formatBytes(int|float $bytes): string
         $value /= 1024;
         ++$unit;
     }
-
     return round($value, 2) . ' ' . $units[$unit];
 }
 
@@ -45,15 +45,46 @@ if (is_readable(HEATING_PARAMETERS_FILE)) {
     $errors['heating.intervals'] = 'Parameterdatei ist nicht lesbar.';
 }
 
-$protocol = '';
+$heizstabprotocol = '';
 if (is_readable(HEATING_LOG_FILE)) {
     $lines = file(HEATING_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
     $lines = array_values(array_filter($lines, static fn (string $line): bool =>
         stripos($line, 'Info') !== false || stripos($line, 'Error') !== false
     ));
-    $protocol = implode("\n", array_slice($lines, -9));
+    $heizstabprotocol = implode("\n", array_slice($lines, -9));
 } else {
     $errors['heating.protocol'] = 'Protokolldatei ist nicht lesbar.';
+}
+
+$backuperrors = [];
+$backupprotocol = [];
+$backupReadable = is_readable(BACKUP_LOG_FILE);
+$backupExists = file_exists(BACKUP_LOG_FILE);
+
+if ($backupReadable) {
+    $lines = file(
+        BACKUP_LOG_FILE,
+        FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES
+    );
+
+    if ($lines === false) {
+        $errors['backup.protocol'] = 'Datei konnte nicht gelesen werden.';
+    } else {
+        $backupprotocol = array_slice($lines, -12);
+
+        $errorLines = array_filter(
+            $lines,
+            static fn (string $line): bool =>
+                stripos($line, 'Fehler') !== false
+        );
+
+        $backuperrors = array_slice(
+            array_values($errorLines),
+            -9
+        );
+    }
+} else {
+    $errors['backup.protocol'] ='Nicht lesbar: ' . BACKUP_LOG_FILE;
 }
 
 $total = @disk_total_space('/');
@@ -147,7 +178,15 @@ echo json_encode([
         'heating' => [
             'serverStatus' => $serverRunning ? 1 : 0,
             'intervals' => $intervals,
-            'protocol' => $protocol,
+            'protocol' => $heizstabprotocol,
+        ],
+        'backup' => [
+            'file' => BACKUP_LOG_FILE,
+            'exists' => $backupExists,
+            'readable' => $backupReadable,
+            'errors' => $backuperrors,
+            'protocol' => $backupprotocol,
+            'readError' => $errors['backup.protocol'] ?? null,
         ],
     ],
     'errors' => $errors,

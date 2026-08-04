@@ -44,7 +44,6 @@ DB_USER="peter"
 DB_PASS="sql666sql"
 
 SERVICES=(
-  collect.service
   heizstab.service
   mosquitto.service
   raspi-lima-tunnel.service
@@ -61,7 +60,7 @@ log() {
 
 fail() {
   local msg="${1:-Unbekannter Fehler}"
-  log "FEHLER: $msg"
+  log "ERROR: $(date '+%F %T') $msg"
   echo "ABGEBROCHEN $(date '+%F %T') : $msg" > "$STATUS_ABORT"
   exit 1
 }
@@ -130,6 +129,9 @@ fi
 ############################
 mkdir -p "$BACKUP_BASE"
 touch "$LOGFILE" || fail "Logdatei kann nicht geschrieben werden: $LOGFILE"
+
+chgrp www-data "$LOGFILE"
+chmod 0640 "$LOGFILE"
 
 log "===================================="
 log "Backup START"
