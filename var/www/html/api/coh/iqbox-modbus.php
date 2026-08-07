@@ -21,14 +21,9 @@ function iqboxPrivateHost(string $host): bool
         && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
 }
 
-$configuredToken = trim((string) (getenv('COH_API_TOKEN') ?: ''));
-$tokenFile = '/home/peter/coh/config/api-token';
-if ($configuredToken === '' && is_readable($tokenFile)) {
-    $configuredToken = trim((string) file_get_contents($tokenFile));
-}
-if ($configuredToken === '') {
-    iqboxRespond(503, ['ok' => false, 'error' => 'API-Token ist auf dem Raspberry nicht konfiguriert']);
-}
+const COH_API_TOKEN = 'COH_CODE';
+
+$configuredToken = COH_API_TOKEN;
 $requestToken = (string) ($_SERVER['HTTP_X_COH_TOKEN'] ?? ($_GET['token'] ?? ''));
 if (!hash_equals($configuredToken, $requestToken)) {
     iqboxRespond(401, ['ok' => false, 'error' => 'unauthorized']);
@@ -46,6 +41,7 @@ if ($port < 1 || $port > 65535 || $unitId < 0 || $unitId > 255 || $timeout < 0.1
 }
 
 $classCandidates = [
+    __DIR__ . '/AmpereStorageProModbus.php',
     '/home/peter/coh/sensorCollect/Sensor/AmpereStorageProModbus.php',
     dirname(__DIR__, 4) . '/sensorCollect/Sensor/AmpereStorageProModbus.php',
 ];
