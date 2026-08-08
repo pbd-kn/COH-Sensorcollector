@@ -279,12 +279,12 @@ function buildCompatibleData(array $snapshot): array
     $data = $snapshot['data'];
     $energy = $data['energy'];
     $today = compatibleWork(
-        $energy['pv']['today'],
-        $energy['house']['calculatedToday'],
+        $energy['inverter']['today'],
+        $energy['house']['today'],
         $energy['battery']['chargeToday'],
         $energy['battery']['dischargeToday'],
-        $energy['grid']['sellToday'],
-        $energy['grid']['feedInToday']
+        $energy['grid']['sumSellToday'] ?? $energy['grid']['sellToday'],
+        $energy['grid']['sumFeedInToday'] ?? $energy['grid']['feedInToday']
     );
     $totalConsumption = calculatedConsumption(
         $energy['pv']['total'],
@@ -485,4 +485,3 @@ function compatibleValueFromPath(array $data, string $path): mixed
     }
     return $cursor;
 }
-

@@ -76,6 +76,8 @@ final class AmpereStorageProModbus
         'energy.grid.sellTotal' => ['address' => 0x40F5, 'type' => 'uint32', 'scale' => 0.01, 'unit' => 'kWh', 'description' => 'Netzeinspeisung (Export) gesamt'],
         'energy.grid.feedInToday' => ['address' => 0x40F7, 'type' => 'uint32', 'scale' => 0.01, 'unit' => 'kWh', 'description' => 'Netzbezug (Import) heute'],
         'energy.grid.feedInTotal' => ['address' => 0x40FD, 'type' => 'uint32', 'scale' => 0.01, 'unit' => 'kWh', 'description' => 'Netzbezug (Import) gesamt'],
+        'energy.grid.sumFeedInToday' => ['address' => 0x4167, 'type' => 'uint32', 'scale' => 0.01, 'unit' => 'kWh', 'description' => 'Netzbezug heute, Summe'],
+        'energy.grid.sumSellToday' => ['address' => 0x416F, 'type' => 'uint32', 'scale' => 0.01, 'unit' => 'kWh', 'description' => 'Netzeinspeisung heute, Summe'],
 
         'battery.soc' => ['address' => 0xA00C, 'type' => 'uint16', 'scale' => 0.01, 'unit' => '%', 'description' => 'Ladezustand Batterie 1'],
         'battery.soh' => ['address' => 0xA00D, 'type' => 'uint16', 'scale' => 0.01, 'unit' => '%', 'description' => 'Gesundheitszustand Batterie 1'],
@@ -193,14 +195,14 @@ final class AmpereStorageProModbus
             }
             $values[$name] = self::decode($registers, 0, $definition['type'], $definition['scale']);
         }
-        $values['energy.house.calculatedToday'] = round(
-            $values['energy.pv.today']
-            + $values['energy.grid.feedInToday']
-            + $values['energy.battery.dischargeToday']
-            - $values['energy.grid.sellToday']
-            - $values['energy.battery.chargeToday'],
-            2
-        );
+        foreach (['energy.grid.sumFeedInToday', 'energy.grid.sumSellToday'] as $name) {
+            try {
+                $values[$name] = $this->readValue($name);
+            } catch (Throwable) {
+                // Optionale Summenzähler sind nicht in jeder Firmware verfügbar.
+            }
+        }
+        $values['energy.house.calculatedToday'] = $values['energy.house.today'];
 
 
         $nested = [];
