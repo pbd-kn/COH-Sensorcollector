@@ -16,7 +16,7 @@ umask 077
 # KONFIG
 ############################
 BACKUP_BASE="/media/peter/USBBACKUP"
-BACKUP_DIR="$BACKUP_BASE/backups"
+BACKUP_DIR="$BACKUP_BASE/backups/${DATE}"
 DATE="$(date +%Y-%m-%d_%H-%M-%S)"
 
 IMAGE="$BACKUP_DIR/${DATE}_raspi.img.gz"
@@ -46,8 +46,6 @@ DB_PASS="sql666sql"
 SERVICES=(
   heizstab.service
   mosquitto.service
-  raspi-lima-tunnel.service
-  raspi-local-tunnel.service
   mariadb.service
 )
 
@@ -130,8 +128,16 @@ fi
 mkdir -p "$BACKUP_BASE"
 touch "$LOGFILE" || fail "Logdatei kann nicht geschrieben werden: $LOGFILE"
 
-chgrp www-data "$LOGFILE"
-chmod 0640 "$LOGFILE"
+[ "$(id -u)" -eq 0 ] || fail "Script muss als root laufen"
+
+# FAT/exFAT/NTFS unterstuetzen keine normalen Linux-Gruppenrechte.
+# In diesem Fall darf das Backup trotzdem weiterlaufen.
+if chgrp www-data "$LOGFILE" 2>/dev/null; then
+  chmod 0640 "$LOGFILE"
+else
+  chmod 0600 "$LOGFILE" 2>/dev/null || true
+  log "WARNUNG: Gruppe www-data konnte fuer $LOGFILE nicht gesetzt werden"
+fi
 
 log "===================================="
 log "Backup START"
@@ -140,8 +146,6 @@ log "===================================="
 ############################
 # VORCHECKS
 ############################
-[ "$(id -u)" -eq 0 ] || fail "Script muss als root laufen"
-
 check_cmd mountpoint
 check_cmd mkdir
 check_cmd tar

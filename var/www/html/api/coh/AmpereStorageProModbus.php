@@ -31,6 +31,17 @@ final class AmpereStorageProModbus
         'inverter.temperature' => ['address' => 0x4010, 'type' => 'int16', 'scale' => 0.1, 'unit' => '°C', 'description' => 'Temperatur des Wechselrichters'],
         'inverter.ambientTemperature' => ['address' => 0x4011, 'type' => 'int16', 'scale' => 0.1, 'unit' => '°C', 'description' => 'Umgebungstemperatur des Wechselrichters'],
 
+        'inverter.dischargePowerSetpoint' => ['address' => 0x4023, 'type' => 'int16', 'scale' => 1.0, 'unit' => 'W', 'description' => 'Sollwert der Wechselrichter-Entladeleistung'],
+        'inverter.chargePowerSetpoint' => ['address' => 0x4024, 'type' => 'int16', 'scale' => 1.0, 'unit' => 'W', 'description' => 'Sollwert der Wechselrichter-Ladeleistung'],
+        'battery.dischargeCurrentSetpoint' => ['address' => 0x4025, 'type' => 'int16', 'scale' => 0.1, 'unit' => 'A', 'description' => 'Sollwert des Batterie-Entladestroms'],
+        'battery.chargeCurrentSetpoint' => ['address' => 0x4026, 'type' => 'int16', 'scale' => 0.1, 'unit' => 'A', 'description' => 'Sollwert des Batterie-Ladestroms'],
+        'battery.statusDisplay' => ['address' => 0x4027, 'type' => 'uint16', 'scale' => 1.0, 'unit' => '', 'description' => 'Batteriestatus-Anzeige'],
+        'battery.protocol' => ['address' => 0x4028, 'type' => 'int16', 'scale' => 1.0, 'unit' => '', 'description' => 'Eingestelltes Batterieprotokoll'],
+        'battery.chargeSocUpperLimit' => ['address' => 0x4029, 'type' => 'int16', 'scale' => 1.0, 'unit' => '%', 'description' => 'Obere SOC-Grenze beim Laden'],
+        'battery.dischargeSocLowerLimit' => ['address' => 0x402A, 'type' => 'int16', 'scale' => 1.0, 'unit' => '%', 'description' => 'Untere SOC-Grenze beim Entladen'],
+        'battery.depthOfDischargeSetpoint' => ['address' => 0x402B, 'type' => 'int16', 'scale' => 1.0, 'unit' => '%', 'description' => 'Eingestellte Entladetiefe'],
+        'battery.reserveSoc' => ['address' => 0x402C, 'type' => 'int16', 'scale' => 1.0, 'unit' => '%', 'description' => 'Eingestellte SOC-Reserve'],
+        'meter.mode' => ['address' => 0x4030, 'type' => 'int16', 'scale' => 1.0, 'unit' => '', 'description' => 'Eingestellter Zählermodus'],
         'grid.l1.voltage' => ['address' => 0x4031, 'type' => 'uint16', 'scale' => 0.1, 'unit' => 'V', 'description' => 'Netzspannung Phase L1'],
         'grid.l1.current' => ['address' => 0x4032, 'type' => 'int16', 'scale' => 0.01, 'unit' => 'A', 'description' => 'Netzstrom Phase L1'],
         'grid.l1.frequency' => ['address' => 0x4033, 'type' => 'uint16', 'scale' => 0.01, 'unit' => 'Hz', 'description' => 'Netzfrequenz Phase L1'],
@@ -94,6 +105,7 @@ final class AmpereStorageProModbus
      */
     private const SNAPSHOT_BLOCKS = [
         [0x4010, 2],
+        [0x4023, 14],
         [0x4031, 21],
         [0x406E, 15],
         [0x40A0, 14],
