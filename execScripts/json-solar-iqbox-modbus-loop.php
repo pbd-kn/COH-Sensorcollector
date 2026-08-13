@@ -131,7 +131,7 @@ Cloud-kompatible Befehle, lokal per Modbus gelesen:
   today-saving-pv-production  PV-Produktion heute
   today-saving-grid-feed      Netzeinspeisung heute
   today-saving-own-consumption direkt verbrauchte PV-Energie
-  lifetime | lifetime.work    Gesamtzaehler seit Inbetriebnahme
+  lifetime | lifetime.work    PV-/Akku-Gesamtzaehler; Netz und Verbrauch nicht verfuegbar
   lifetime.pvProduction       gesamte PV-Erzeugung
   all                         live, today und lifetime als JSON
   modbus                      alle zusaetzlichen lokalen Modbus-Werte
@@ -286,21 +286,18 @@ function buildCompatibleData(array $snapshot): array
         $energy['grid']['sumSellToday'] ?? $energy['grid']['sellToday'],
         $energy['grid']['sumFeedInToday'] ?? $energy['grid']['feedInToday']
     );
-    $totalConsumption = calculatedConsumption(
-        $energy['pv']['total'],
-        $energy['grid']['feedInTotal'],
-        $energy['battery']['dischargeTotal'],
-        $energy['grid']['sellTotal'],
-        $energy['battery']['chargeTotal']
-    );
-    $lifetime = compatibleWork(
-        $energy['pv']['total'],
-        $totalConsumption,
-        $energy['battery']['chargeTotal'],
-        $energy['battery']['dischargeTotal'],
-        $energy['grid']['sellTotal'],
-        $energy['grid']['feedInTotal']
-    );
+    // Die StoragePro-Zaehler sellTotal/feedInTotal stimmen bei dieser Anlage
+    // nicht mit den saldierten Netz-Gesamtwerten am Stromzaehler ueberein.
+    // Daher werden daraus weder Netz-Lifetime-Werte noch Verbrauch berechnet.
+    $lifetime = [
+        'generation' => round((float) $energy['pv']['total'] * 1000, 2),
+        'consumption' => null,
+        'batteryFeed' => round((float) $energy['battery']['chargeTotal'] * 1000, 2),
+        'batteryDraw' => round((float) $energy['battery']['dischargeTotal'] * 1000, 2),
+        'gridFeed' => null,
+        'gridDraw' => null,
+        'unit' => 'Wh',
+    ];
     $live = [
         'pvPower' => $data['pv']['power'],
         'housePower' => -abs($data['house']['power']),
@@ -341,7 +338,8 @@ function buildCompatibleData(array $snapshot): array
             'pvProduction' => $lifetime['generation'],
             'work' => $lifetime + [
                 'throughDate' => date('Y-m-d'),
-                'source' => 'StoragePro-Modbus-Gesamtzaehler',
+                'source' => 'StoragePro-Modbus-Teilzaehler',
+                '_notice' => 'Netz-Gesamtwerte und Gesamtverbrauch sind per Modbus nicht verlaesslich; dafuer Tasmota verwenden.',
             ],
         ],
         'modbus' => $data,
@@ -373,18 +371,6 @@ function compatibleWork(
     ];
 }
 
-function calculatedConsumption(
-    float $pvKwh,
-    float $gridImportKwh,
-    float $batteryDischargeKwh,
-    float $gridExportKwh,
-    float $batteryChargeKwh
-): float {
-    return round(
-        $pvKwh + $gridImportKwh + $batteryDischargeKwh - $gridExportKwh - $batteryChargeKwh,
-        2
-    );
-}
 
 function compatiblePercent(float $part, float $whole): ?float
 {

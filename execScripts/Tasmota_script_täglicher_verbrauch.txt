@@ -1,0 +1,55 @@
+>D
+bez=0
+einsp=0
+bez_tag=0
+einsp_tag=0
+akt_tag=0
+p:bez_null=0
+p:einsp_null=0
+p:gesp_tag=0
+
+>B
+->sensor53 r
+
+>T
+bez=M60#TS_E_in_108
+einsp=M60#TS_E_out_208
+
+>S
+akt_tag=day
+
+; Beim ersten Start und bei einem neuen Tag
+; aktuelle Zaehlerstaende als Tagesanfang speichern
+if bez>0
+and gesp_tag!=akt_tag
+then
+bez_null=bez
+einsp_null=einsp
+gesp_tag=akt_tag
+svars
+endif
+
+; Tageswerte berechnen
+if bez_null>0
+then
+bez_tag=bez-bez_null
+einsp_tag=einsp-einsp_null
+endif
+
+>W
+Verbrauch heute: {m} %3bez_tag% kWh
+Einspeisung heute: {m} %3einsp_tag% kWh
+
+>J
+,"Verbrauch_heute":%3bez_tag%
+,"Einspeisung_heute":%3einsp_tag%
+
+>M 1
++1,3,s,0,9600,M60,1
+1,77070100010800ff@1000,Verbrauch 108,kWh,TS_E_in_108,2
+1,77070100020800ff@1000,Einspeisung 208,kWh,TS_E_out_208,2
+1,77070100100700ff@1,akt. Leistung,W,TS_Power,0
+1,77070100240700ff@1,Watt_L1,W,TS_Power_L1,0
+1,77070100380700ff@1,Watt_L2,W,TS_Power_L2,0
+1,770701004c0700ff@1,Watt_L3,W,TS_Power_L3,0
+#

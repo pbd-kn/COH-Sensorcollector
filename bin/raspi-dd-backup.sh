@@ -16,8 +16,10 @@ umask 077
 # KONFIG
 ############################
 BACKUP_BASE="/media/peter/USBBACKUP"
-BACKUP_DIR="$BACKUP_BASE/backups/${DATE}"
 DATE="$(date +%Y-%m-%d_%H-%M-%S)"
+BACKUP_ROOT="$BACKUP_BASE/backups"
+BACKUP_DIR="$BACKUP_ROOT/$DATE"
+MAX_BACKUPS=5
 
 IMAGE="$BACKUP_DIR/${DATE}_raspi.img.gz"
 MYSQL_DUMP="$BACKUP_DIR/${DATE}_mysql.sql.gz"
@@ -166,6 +168,8 @@ check_cmd apt-mark
 check_cmd crontab
 check_cmd systemctl
 check_cmd getent
+check_cmd sort
+check_cmd find
 
 [ -b "$SOURCE_DEVICE" ] || fail "Quellgerät nicht gefunden: $SOURCE_DEVICE"
 
@@ -175,6 +179,39 @@ fi
 
 touch "$BACKUP_BASE/.write_test" || fail "USB-Stick nicht beschreibbar: $BACKUP_BASE"
 rm -f "$BACKUP_BASE/.write_test"
+
+mkdir -p "$BACKUP_ROOT"
+
+############################
+# BACKUP-ROTATION
+############################
+log "Backup-Rotation (maximal $MAX_BACKUPS Backups)"
+
+# Vor dem neuen Backup auf maximal vier alte Sicherungen reduzieren. Dadurch
+# müssen nie sechs vollständige Backups gleichzeitig auf den USB-Stick passen.
+mapfile -t BACKUP_DIRS < <(
+  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+    | awk '/^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$/' \
+    | sort
+)
+
+DELETE_COUNT=$(( ${#BACKUP_DIRS[@]} - MAX_BACKUPS + 1 ))
+if [ "$DELETE_COUNT" -gt 0 ]; then
+  for ((i = 0; i < DELETE_COUNT; i++)); do
+    OLD_BACKUP="$BACKUP_ROOT/${BACKUP_DIRS[$i]}"
+
+    # Sicherheitsprüfung: ausschließlich direkte, datierte Unterordner löschen.
+    if [[ "$OLD_BACKUP" == "$BACKUP_ROOT"/* ]] \
+      && [[ "${BACKUP_DIRS[$i]}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]]; then
+      log " -> Entferne altes Backup: $OLD_BACKUP"
+      rm -rf -- "$OLD_BACKUP"
+    else
+      fail "Unsicheres Backup-Verzeichnis wird nicht gelöscht: $OLD_BACKUP"
+    fi
+  done
+else
+  log " -> Keine alten Backups zu entfernen (${#BACKUP_DIRS[@]}/$MAX_BACKUPS)"
+fi
 
 mkdir -p "$BACKUP_DIR"
 

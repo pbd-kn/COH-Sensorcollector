@@ -51,11 +51,11 @@
                         },
     "heizstabRestMode":  "local",
     "debug":  "1",
-    "ampereIqCloud":  {
-                          "enabled":  true,
-                          "paramsFile":  "task_solar_params.json",
-                          "retries":  3,
-                          "retryDelay":  10,
-                          "lifetimeCacheSeconds":  60
-                      }
+    "iqBoxModbus":  {
+                         "enabled":  true,
+                         "host":  "ASP-HSR2103J2311E08738.local",
+                         "port":  502,
+                         "unitId":  1,
+                         "timeout":  3
+                     }
 }

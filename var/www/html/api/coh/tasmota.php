@@ -75,6 +75,44 @@ if (!is_array($data)) {
     respond(502, ['ok' => false, 'error' => 'Tasmota-Antwort ist kein JSON-Objekt']);
 }
 
+$scriptVariables = [
+    'Verbrauch_heute' => 'bez_tag',
+    'Einspeisung_heute' => 'einsp_tag',
+];
+foreach ($scriptVariables as $jsonName => $scriptName) {
+    $scriptUrl = rtrim($deviceUrl, '/') . '/cm?cmnd=' . rawurlencode('script?' . $scriptName);
+    $scriptCh = curl_init($scriptUrl);
+    curl_setopt_array($scriptCh, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $scriptBody = curl_exec($scriptCh);
+    $scriptStatus = (int) curl_getinfo($scriptCh, CURLINFO_HTTP_CODE);
+    $scriptError = curl_error($scriptCh);
+    curl_close($scriptCh);
+
+    if ($scriptBody === false) {
+        respond(502, ['ok' => false, 'error' => 'Tasmota-Script-cURL-Fehler: ' . $scriptError]);
+    }
+    if ($scriptStatus !== 200) {
+        respond(502, ['ok' => false, 'error' => 'Tasmota-Script HTTP ' . $scriptStatus]);
+    }
+
+    try {
+        $scriptData = json_decode((string) $scriptBody, true, 512, JSON_THROW_ON_ERROR);
+    } catch (Throwable $error) {
+        respond(502, ['ok' => false, 'error' => 'Ungueltige Tasmota-Script-JSON-Antwort: ' . $error->getMessage()]);
+    }
+    if (!array_key_exists($scriptName, $scriptData['script'] ?? [])) {
+        respond(502, ['ok' => false, 'error' => "Tasmota-Scriptwert '$scriptName' fehlt"]);
+    }
+
+    $data['StatusSNS'][$jsonName] = $scriptData['script'][$scriptName];
+}
+
 respond(200, [
     'ok' => true,
     'readAt' => date(DATE_ATOM),

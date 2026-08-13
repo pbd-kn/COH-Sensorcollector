@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Interaktiver Lesetest fuer Tasmota Status 10.
+ * Interaktiver Lesetest fuer Tasmota Status 10 und Script-Tageswerte.
  * Modi:
  *   local - Tasmota im lokalen Netz direkt lesen
  *   http  - Tasmota ueber /api/coh/tasmota.php auf dem Raspberry lesen
@@ -48,6 +48,7 @@ try {
     $rawData = loadTasmotaData();
     $items = flattenJson($rawData);
     echo 'Werte geladen: ' . count($items) . PHP_EOL;
+    printItems($items, '');
     printHelp();
 
     while (true) {
@@ -75,6 +76,7 @@ try {
             $rawData = loadTasmotaData();
             $items = flattenJson($rawData);
             echo 'Werte neu geladen: ' . count($items) . PHP_EOL;
+            printItems($items, '');
             continue;
         }
         if (preg_match('/^mode\s+(local|http)$/i', $input, $matches)) {
@@ -84,9 +86,19 @@ try {
             $rawData = loadTasmotaData();
             $items = flattenJson($rawData);
             echo 'Werte geladen: ' . count($items) . PHP_EOL;
+            printItems($items, '');
             continue;
         }
-        if (in_array($lower, ['raw', 'json'], true)) {
+        if ($lower === 'json') {
+            $json = json_encode($rawData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($json === false) {
+                echo 'WARNUNG: JSON konnte nicht erzeugt werden.' . PHP_EOL;
+            } else {
+                echo $json . PHP_EOL;
+            }
+            continue;
+        }
+        if ($lower === 'raw') {
             $file = __DIR__ . '/tasmota-status-' . date('Ymd-His') . '.json';
             $json = json_encode($rawData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($json === false || file_put_contents($file, $json . PHP_EOL, LOCK_EX) === false) {
@@ -114,7 +126,9 @@ function loadTasmotaData(): array
 
     if ($mode === 'local') {
         $url = rtrim($deviceUrl, '/') . '/cm?cmnd=' . rawurlencode('Status 10');
-        return requestJson($url, [], $timeout);
+        $data = requestJson($url, [], $timeout);
+
+        return addScriptDailyValues($data, $deviceUrl, $timeout);
     }
 
     $url = rtrim($httpBaseUrl, '/') . $httpPath . '?' . http_build_query(
@@ -129,6 +143,25 @@ function loadTasmotaData(): array
     }
 
     return $payload['data'];
+}
+
+function addScriptDailyValues(array $data, string $deviceUrl, int $timeout): array
+{
+    $scriptVariables = [
+        'Verbrauch_heute' => 'bez_tag',
+        'Einspeisung_heute' => 'einsp_tag',
+    ];
+
+    foreach ($scriptVariables as $jsonName => $scriptName) {
+        $url = rtrim($deviceUrl, '/') . '/cm?cmnd=' . rawurlencode('script?' . $scriptName);
+        $response = requestJson($url, [], $timeout);
+        if (!array_key_exists($scriptName, $response['script'] ?? [])) {
+            throw new RuntimeException("Tasmota-Scriptwert '$scriptName' fehlt in der Antwort.");
+        }
+        $data['StatusSNS'][$jsonName] = $response['script'][$scriptName];
+    }
+
+    return $data;
 }
 
 function requestJson(string $url, array $headers, int $timeout): array
@@ -187,12 +220,30 @@ function printItems(array $items, string $filter): void
         if ($filter !== '' && !matchesFilter($item['key'], $filter)) {
             continue;
         }
-        echo $item['key'] . ': ' . formatValue($item['value']) . PHP_EOL;
+        $unit = unitForPath($item['key']);
+        $comment = $unit !== '' ? '  # ' . $unit : '';
+        echo $item['key'] . ': ' . formatValue($item['value']) . $comment . PHP_EOL;
         ++$matches;
     }
     if ($matches === 0) {
         echo 'Keine passenden Werte.' . PHP_EOL;
     }
+}
+
+function unitForPath(string $path): string
+{
+    return match ($path) {
+        'StatusSNS.M60.TS_E_in_108',
+        'StatusSNS.M60.TS_E_out_208',
+        'StatusSNS.Verbrauch_heute',
+        'StatusSNS.Einspeisung_heute' => 'kWh',
+        'StatusSNS.M60.TS_Power',
+        'StatusSNS.M60.TS_Power_L1',
+        'StatusSNS.M60.TS_Power_L2',
+        'StatusSNS.M60.TS_Power_L3' => 'W',
+        'StatusSNS.Time' => 'Zeitstempel',
+        default => '',
+    };
 }
 
 function matchesFilter(string $key, string $filter): bool
@@ -239,7 +290,7 @@ function printConfiguration(): void
 {
     global $mode, $deviceUrl, $httpBaseUrl, $httpPath, $httpToken, $paramsFile, $timeout;
 
-    echo 'Tasmota Status-10-Test' . PHP_EOL;
+    echo 'Tasmota Status-10- und Tageswerte-Test' . PHP_EOL;
     echo "Modus:       $mode" . PHP_EOL;
     echo "Tasmota:     $deviceUrl" . PHP_EOL;
     echo "HTTP API:    $httpBaseUrl$httpPath" . PHP_EOL;
@@ -258,7 +309,8 @@ function printHelp(): void
     echo "  sensoren                dokumentierte Einzelwerte und Einheiten anzeigen\n";
     echo "  mode local|http         Zugriffsart wechseln\n";
     echo "  r                       Daten neu laden\n";
-    echo "  raw                     kompletten Payload als JSON speichern\n";
+    echo "  json                    komplettes JSON direkt anzeigen\n";
+    echo "  raw                     komplettes JSON in Datei speichern\n";
     echo "  q                       beenden\n";
 }
 
@@ -271,13 +323,16 @@ function printDocumentedSensors(): void
         'TS_Power_L1' => ['Leistung Phase L1', 'W'],
         'TS_Power_L2' => ['Leistung Phase L2', 'W'],
         'TS_Power_L3' => ['Leistung Phase L3', 'W'],
+        'Verbrauch_heute' => ['Verbrauch heute', 'kWh'],
+        'Einspeisung_heute' => ['Einspeisung heute', 'kWh'],
     ];
 
     echo PHP_EOL . "Dokumentierte Einzelwerte:\n";
     foreach ($sensors as $name => [$description, $unit]) {
         echo sprintf("  %-16s %-22s %s\n", $name, $description, $unit);
-        echo "    Pfad: StatusSNS.M60.$name\n";
-        echo "    Abruf: get StatusSNS.M60.$name\n";
+        $path = str_ends_with($name, '_heute') ? "StatusSNS.$name" : "StatusSNS.M60.$name";
+        echo "    Pfad: $path\n";
+        echo "    Abruf: get $path\n";
     }
 }
 
