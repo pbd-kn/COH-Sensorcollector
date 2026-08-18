@@ -1,6 +1,6 @@
 {
     "stop":  false,
-    "repeat":  "15",
+    "repeat":  "10",
     "logfile":  "./heizstabserver.log",
     "Heizintervalle":  [
                            {
