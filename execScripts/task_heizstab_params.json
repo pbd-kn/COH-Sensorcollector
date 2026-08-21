@@ -4,8 +4,8 @@
     "logfile":  "./heizstabserver.log",
     "Heizintervalle":  [
                            {
-                               "an":  "12:00",
-                               "aus":  "14:00"
+                               "an":  "08:00",
+                               "aus":  "12:00"
                            },
                            {
                                "an":  "16:00",

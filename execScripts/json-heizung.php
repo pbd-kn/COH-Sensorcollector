@@ -174,15 +174,18 @@ function getLocalRegulationValues()
     global $iqBoxModbus, $logger;
     if (empty($iqBoxModbus['enabled'])) { $logger->Error('IQ-Box-Modbuszugriff ist deaktiviert'); return false; }
     try {
+        $val='batterySoc';      //Für errormessage
         $batterySoc = readIqBoxBatterySoc($iqBoxModbus);
         // Der Heizstab ist per Modbus durch die IQ-Box belegt. Daher lokal per data.jsn/setup.jsn lesen.
+        $val='temperature';      //Für errormessage
         $temperature = normalizeTemperatureValue(getHeizstabdata('temp1'));
+        $val='targetTemperature';      //Für errormessage
         $targetTemperature = getTargetWaterTemp();
         if (!is_numeric($batterySoc) || !is_numeric($temperature) || !is_numeric($targetTemperature)) {
             throw new RuntimeException('Regelungswerte fehlen: batterySoc=' . formatLogValue($batterySoc) . ', temperature=' . formatLogValue($temperature) . ', targetTemperature=' . formatLogValue($targetTemperature));
         }
         return ['batterySoc'=>(float)$batterySoc, 'temperature'=>(float)$temperature, 'targetTemperature'=>(float)$targetTemperature, 'temperatureTimestamp'=>date(DATE_ATOM)];
-    } catch (Throwable $e) { $logger->Error('Lokale Regelungswerte konnten nicht gelesen werden: ' . $e->getMessage()); return false; }
+    } catch (Throwable $e) { $logger->Error("Lokale Regelungswerte konnten nicht gelesen werden: bei $val " . $e->getMessage()); return false; }
 }
 
 function formatLogValue($value): string

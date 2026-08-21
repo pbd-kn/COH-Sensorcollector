@@ -48,10 +48,8 @@ if (is_readable(HEATING_PARAMETERS_FILE)) {
 $heizstabprotocol = '';
 if (is_readable(HEATING_LOG_FILE)) {
     $lines = file(HEATING_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-    $lines = array_values(array_filter($lines, static fn (string $line): bool =>
-        stripos($line, 'Info') !== false || stripos($line, 'Error') !== false
-    ));
-    $heizstabprotocol = implode("\n", array_slice($lines, -9));
+    $lines = array_values(array_filter($lines, static fn (string $line): bool => stripos($line, 'Info') !== false || stripos($line, 'Error') !== false ));
+    $heizstabprotocol = implode("\n", array_slice($lines, -20));
 } else {
     $errors['heating.protocol'] = 'Protokolldatei ist nicht lesbar.';
 }
@@ -74,14 +72,10 @@ if ($backupReadable) {
 
         $errorLines = array_filter(
             $lines,
-            static fn (string $line): bool =>
-                stripos($line, 'Fehler') !== false
+            static fn (string $line): bool => stripos($line, 'Fehler') !== false
         );
 
-        $backuperrors = array_slice(
-            array_values($errorLines),
-            -9
-        );
+        $backuperrors = array_slice( array_values($errorLines), -9);
     }
 } else {
     $errors['backup.protocol'] ='Nicht lesbar: ' . BACKUP_LOG_FILE;
