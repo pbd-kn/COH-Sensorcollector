@@ -163,7 +163,7 @@ function readModbusData($socket, int $length): string
         if ($chunk === false || $chunk === '') {
             $meta = stream_get_meta_data($socket);
             $reason = !empty($meta['timed_out']) ? 'Timeout' : 'Verbindung beendet';
-            throw new RuntimeException("Modbus-Antwort unvollstaendig: $reason.");
+            throw new RuntimeException("Modbus-Antwort unvollstaendig: $reason. gelesen ".strlen($data)."byte soll $length");
         }
         $data .= $chunk;
     }

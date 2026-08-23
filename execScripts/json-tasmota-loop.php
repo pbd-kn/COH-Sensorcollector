@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Interaktiver Lesetest fuer Tasmota Status 10 und Script-Tageswerte.
+ * Interaktiver Lesetest fuer Tasmota Status 10 sowie Script-Tages- und Jahreswerte.
  * Modi:
  *   local - Tasmota im lokalen Netz direkt lesen
  *   http  - Tasmota ueber /api/coh/tasmota.php auf dem Raspberry lesen
@@ -128,7 +128,7 @@ function loadTasmotaData(): array
         $url = rtrim($deviceUrl, '/') . '/cm?cmnd=' . rawurlencode('Status 10');
         $data = requestJson($url, [], $timeout);
 
-        return addScriptDailyValues($data, $deviceUrl, $timeout);
+        return addScriptValues($data, $deviceUrl, $timeout);
     }
 
     $url = rtrim($httpBaseUrl, '/') . $httpPath . '?' . http_build_query(
@@ -145,11 +145,17 @@ function loadTasmotaData(): array
     return $payload['data'];
 }
 
-function addScriptDailyValues(array $data, string $deviceUrl, int $timeout): array
+function addScriptValues(array $data, string $deviceUrl, int $timeout): array
 {
     $scriptVariables = [
         'Verbrauch_heute' => 'bez_tag',
         'Einspeisung_heute' => 'einsp_tag',
+        'Jahr_aktuell' => 'akt_jahr',
+        'Verbrauch_Jahr' => 'bez_jahr',
+        'Einspeisung_Jahr' => 'einsp_jahr',
+        'Jahr_Vorjahr' => 'vor_jahr',
+        'Verbrauch_Vorjahr' => 'bez_vjahr',
+        'Einspeisung_Vorjahr' => 'einsp_vjahr',
     ];
 
     foreach ($scriptVariables as $jsonName => $scriptName) {
@@ -236,7 +242,11 @@ function unitForPath(string $path): string
         'StatusSNS.M60.TS_E_in_108',
         'StatusSNS.M60.TS_E_out_208',
         'StatusSNS.Verbrauch_heute',
-        'StatusSNS.Einspeisung_heute' => 'kWh',
+        'StatusSNS.Einspeisung_heute',
+        'StatusSNS.Verbrauch_Jahr',
+        'StatusSNS.Einspeisung_Jahr',
+        'StatusSNS.Verbrauch_Vorjahr',
+        'StatusSNS.Einspeisung_Vorjahr' => 'kWh',
         'StatusSNS.M60.TS_Power',
         'StatusSNS.M60.TS_Power_L1',
         'StatusSNS.M60.TS_Power_L2',
@@ -290,7 +300,7 @@ function printConfiguration(): void
 {
     global $mode, $deviceUrl, $httpBaseUrl, $httpPath, $httpToken, $paramsFile, $timeout;
 
-    echo 'Tasmota Status-10- und Tageswerte-Test' . PHP_EOL;
+    echo 'Tasmota Status-10- sowie Tages- und Jahreswerte-Test' . PHP_EOL;
     echo "Modus:       $mode" . PHP_EOL;
     echo "Tasmota:     $deviceUrl" . PHP_EOL;
     echo "HTTP API:    $httpBaseUrl$httpPath" . PHP_EOL;
@@ -325,12 +335,18 @@ function printDocumentedSensors(): void
         'TS_Power_L3' => ['Leistung Phase L3', 'W'],
         'Verbrauch_heute' => ['Verbrauch heute', 'kWh'],
         'Einspeisung_heute' => ['Einspeisung heute', 'kWh'],
+        'Verbrauch_Jahr' => ['Verbrauch laufendes Jahr', 'kWh'],
+        'Einspeisung_Jahr' => ['Einspeisung laufendes Jahr', 'kWh'],
+        'Jahr_aktuell' => ['Aktuelles Kalenderjahr', ''],
+        'Jahr_Vorjahr' => ['Letztes abgeschlossenes Jahr', ''],
+        'Verbrauch_Vorjahr' => ['Verbrauch letztes Jahr', 'kWh'],
+        'Einspeisung_Vorjahr' => ['Einspeisung letztes Jahr', 'kWh'],
     ];
 
     echo PHP_EOL . "Dokumentierte Einzelwerte:\n";
     foreach ($sensors as $name => [$description, $unit]) {
         echo sprintf("  %-16s %-22s %s\n", $name, $description, $unit);
-        $path = str_ends_with($name, '_heute') ? "StatusSNS.$name" : "StatusSNS.M60.$name";
+        $path = str_starts_with($name, 'TS_') ? "StatusSNS.M60.$name" : "StatusSNS.$name";
         echo "    Pfad: $path\n";
         echo "    Abruf: get $path\n";
     }

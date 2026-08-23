@@ -78,6 +78,12 @@ if (!is_array($data)) {
 $scriptVariables = [
     'Verbrauch_heute' => 'bez_tag',
     'Einspeisung_heute' => 'einsp_tag',
+    'Jahr_aktuell' => 'akt_jahr',
+    'Verbrauch_Jahr' => 'bez_jahr',
+    'Einspeisung_Jahr' => 'einsp_jahr',
+    'Jahr_Vorjahr' => 'vor_jahr',
+    'Verbrauch_Vorjahr' => 'bez_vjahr',
+    'Einspeisung_Vorjahr' => 'einsp_vjahr',
 ];
 foreach ($scriptVariables as $jsonName => $scriptName) {
     $scriptUrl = rtrim($deviceUrl, '/') . '/cm?cmnd=' . rawurlencode('script?' . $scriptName);
