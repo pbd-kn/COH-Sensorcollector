@@ -22,7 +22,7 @@ class HeizstabSensorService implements SensorFetcherInterface
 
     public function __construct(private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient)
     {
-        $this->loadBundleParameters();
+        $this->loadLocalParameters();
     }
 
     public function supports($sensor): bool
@@ -41,17 +41,10 @@ class HeizstabSensorService implements SensorFetcherInterface
         $res = [];
 
         try {
-            $access = '';
-            if (count($sensors) > 0) {
-                $access = trim((string)($sensors[0]['geraeteUrl'] ?? ''));
-                $this->logger->debugMe('Heizstab Sensorservice Zugriff aus erster geraeteUrl len sensors:' . count($sensors));
-            }
-            if ($access === '') {
-                $access = $this->configuredAccess;
-            }
+            $access = $this->configuredAccess;
 
             if ($access === '') {
-                $this->logger->Error('Heizstab: geraeteUrl fehlt. Erwartet wird IP/Hostname oder serialnummer:APIKey');
+                $this->logger->Error('Heizstab: lokale URL/IP fehlt in den Sensorcollector-Einstellungen.');
                 return null;
             }
 
@@ -105,13 +98,6 @@ class HeizstabSensorService implements SensorFetcherInterface
     private function getDataFromDevice(string $access)
     {
         try {
-            $cloudAccess = $this->parseCloudApiAccess($access);
-            if ($cloudAccess === false) { return null; }
-            if ($cloudAccess !== null) {
-                [$serial, $apiKey] = $cloudAccess;
-                return $this->getDataFromCloudApi($serial, $apiKey);
-            }
-
             foreach ($this->getLocalBaseUrlCandidates($access) as $baseUrl) {
                 if (!$this->ensureElwaLogin($baseUrl)) {
                     @unlink($this->heizstabCookieFile);
@@ -425,12 +411,17 @@ class HeizstabSensorService implements SensorFetcherInterface
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     }
 
-    private function loadBundleParameters(): void
+    private function loadLocalParameters(): void
     {
-        $parameters = (new BundleSettings($this->db))->heatingRod();
+        $paramsFile = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'execScripts'
+            . DIRECTORY_SEPARATOR . 'task_heizstab_params.json';
+        $json = @file_get_contents($paramsFile);
+        $parameters = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($parameters)) {
+            throw new \RuntimeException("Lokale Heizstab-Parameter fehlen oder sind ungueltig: $paramsFile");
+        }
 
         $auth = is_array($parameters['heizstabAuth'] ?? null) ? $parameters['heizstabAuth'] : [];
-        $api = is_array($parameters['heizstabApi'] ?? null) ? $parameters['heizstabApi'] : [];
         $this->loginPath = (string)($auth['loginPath'] ?? $this->loginPath);
         $this->password = (string)($auth['password'] ?? '');
         $this->passwordField = (string)($auth['passwordField'] ?? $this->passwordField);
@@ -443,15 +434,9 @@ class HeizstabSensorService implements SensorFetcherInterface
         if ($cookieFile !== '') {
             $this->heizstabCookieFile = $cookieFile;
         }
-        $this->cloudApiBaseUrl = rtrim((string)($api['baseUrl'] ?? $this->cloudApiBaseUrl), '/');
-
-        $serial = trim((string)($api['serial'] ?? ''));
-        $apiToken = trim((string)($api['apiToken'] ?? ''));
-        if (!empty($api['enabled']) && $serial !== '' && $apiToken !== '') {
-            $this->configuredAccess = $serial . ':' . $apiToken;
-        } elseif (!empty($auth['enabled'])) {
-            $this->configuredAccess = trim((string)($parameters['urlheizStab'] ?? ''));
-        }
+        // Der Collector laeuft im selben LAN wie der Heizstab und greift immer
+        // direkt auf data.jsn/setup.jsn des lokalen Geraets zu.
+        $this->configuredAccess = trim((string)($parameters['urlheizStab'] ?? ''));
     }
 
     private function getHeizstabdata($sensorID)

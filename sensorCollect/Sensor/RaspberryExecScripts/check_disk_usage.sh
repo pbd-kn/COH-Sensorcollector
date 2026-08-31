@@ -11,6 +11,9 @@ REQUIRED_MOUNTPOINTS=(
   "/media/peter/USBBACKUP"
 )
 
+# Wartezeit bei zunächst fehlendem Mountpoint.
+MOUNT_RETRY_SECONDS=60
+
 SCRIPT_PATH="$(readlink -f "$0")"
 HOST="$(hostname)"
 NOW="$(date '+%F %T')"
@@ -54,16 +57,27 @@ for PART in "${PARTS[@]}"; do
 
   # Prüfen, ob der Mountpoint wirklich eingehängt ist.
   if ! mountpoint -q "$PART"; then
-    ERROR_TEXT="$PART ist nicht eingehängt"
 
-    echo "$NOW - FEHLER: $ERROR_TEXT" >> "$LOGFILE"
+    echo "$NOW - INFO: $PART zunächst nicht eingehängt, erneute Prüfung in ${MOUNT_RETRY_SECONDS}s" >> "$LOGFILE"
 
-    JSON_ITEMS+=(
-      "{\"Partition\":\"${PART}\",\"value\":null,\"einheit\":\"%\",\"totalHuman\":null,\"usedHuman\":null,\"availableHuman\":null,\"status\":\"nicht eingehängt\"}"
-    )
+    sleep "$MOUNT_RETRY_SECONDS"
 
-    WARNINGS+=("$ERROR_TEXT")
-    continue
+    NOW="$(date '+%F %T')"
+
+    if ! mountpoint -q "$PART"; then
+      ERROR_TEXT="$PART ist nicht eingehängt"
+
+      echo "$NOW - FEHLER: $ERROR_TEXT" >> "$LOGFILE"
+
+      JSON_ITEMS+=(
+        "{\"Partition\":\"${PART}\",\"value\":null,\"einheit\":\"%\",\"totalHuman\":null,\"usedHuman\":null,\"availableHuman\":null,\"status\":\"nicht eingehängt\"}"
+      )
+
+      WARNINGS+=("$ERROR_TEXT")
+      continue
+    else
+      echo "$NOW - INFO: $PART ist nach erneuter Prüfung eingehängt" >> "$LOGFILE"
+    fi
   fi
 
   # Gesamt, belegt und verfügbar in Bytes abfragen.
@@ -155,6 +169,8 @@ for PART in "${PARTS[@]}"; do
     "{\"Partition\":\"${PART}\",\"value\":${USAGE},\"einheit\":\"%\",\"totalHuman\":\"${TOTAL_HUMAN}\",\"usedHuman\":\"${USED_HUMAN}\",\"availableHuman\":\"${AVAILABLE_HUMAN}\",\"status\":\"OK\"}"
   )
 
+  NOW="$(date '+%F %T')"
+
   echo "$NOW - geprüft ($PART: USAGE=${USAGE}%, LIMIT=${LIMIT}%)" >> "$LOGFILE"
 
   # Grenzwert prüfen.
@@ -183,6 +199,8 @@ if [ "${#WARNINGS[@]}" -gt 0 ]; then
   WARNING_LIST="$(printf -- '- %s\n' "${WARNINGS[@]}")"
 
   SUBJECT="Raspberry Speicherwarnung: $HOST"
+
+  NOW="$(date '+%F %T')"
 
   BODY="Warnung auf $HOST:
 
