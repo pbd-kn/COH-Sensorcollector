@@ -68,6 +68,46 @@ function getHistoryFlag(mysql_dialog  $db, string $sensorID): int
     return $found ? (int)$history : 1; // Default: 1 (Historie sammeln), falls Sensor nicht gefunden
 }
 
+function getSensorReference(mysql_dialog $db, string $sensorID): array
+{
+    $stmt = $db->prepare('SELECT id, history FROM tl_coh_sensors WHERE sensorID = ? LIMIT 1');
+    if (!$stmt) throw new \RuntimeException('prepare(sensor reference) failed');
+    $stmt->bind_param('s', $sensorID);
+    $stmt->execute();
+    $stmt->bind_result($id, $history);
+    if (!$stmt->fetch()) {
+        $stmt->close();
+        throw new \RuntimeException("Unbekannter Sensor '$sensorID'");
+    }
+    $stmt->close();
+    return ['id' => (int) $id, 'history' => (int) $history];
+}
+
+function getLookupReference(mysql_dialog $db, string $table, string $text): int
+{
+    if (!in_array($table, ['tl_coh_sensoreinheiten', 'tl_coh_sensortypen'], true)) {
+        throw new \InvalidArgumentException('Ungueltige Nachschlagetabelle');
+    }
+    static $cache = [];
+    $key = $table . "\0" . $text;
+    if (isset($cache[$key])) return $cache[$key];
+    $stmt = $db->prepare("INSERT INTO `$table` (`text`) VALUES (?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)");
+    if (!$stmt) throw new \RuntimeException("prepare lookup $table failed");
+    $stmt->bind_param('s', $text);
+    $stmt->execute();
+    $id = (int)$stmt->insert_id;
+    $stmt->close();
+    return $cache[$key] = $id;
+}
+
+function isJsonSensorValue(string $value): bool
+{
+    $value = trim($value);
+    if ($value === '' || !in_array($value[0], ['{', '['], true)) return false;
+    json_decode($value, true);
+    return json_last_error() === JSON_ERROR_NONE;
+}
+
 /**
  * Update der jüngsten Zeile für sensorID (history=0-Fall).
  * Legt eine Zeile an, wenn es noch keine gibt.
@@ -198,18 +238,17 @@ function upsertCurrentValue( mysql_dialog $db, string $sensorID, int $tstamp, st
  * Historie-Fall: wenn der letzte Wert gleich ist -> nur tstamp aktualisieren,
  * sonst neuen Datensatz anlegen.
  */
-function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, string $sensorValue, string $einheit, string $type, string $source, Logger $logger): void {
+function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string $sensorValue, int $einheit, int $sensorType, Logger $logger): void {
     $db->begin_transaction();
 
     try {
         // Letzten Eintrag holen & sperren
         $sqlLast = "SELECT id,
                            TRIM(sensorValue)       AS v,
-                           TRIM(sensorEinheit)    AS e,
-                           TRIM(sensorValueType)  AS t,
-                           TRIM(sensorSource)     AS s
+                           einheit,
+                           sensorType
                       FROM tl_coh_sensorvalue
-                     WHERE sensorID = ?
+                     WHERE sensor = ?
                      ORDER BY id DESC
                      LIMIT 1
                      FOR UPDATE";
@@ -221,20 +260,17 @@ function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, 
             return;
         }
 
-        $stmt->bind_param('s', $sensorID);
+        $stmt->bind_param('i', $sensor);
         $stmt->execute();
-        $stmt->bind_result($lastId, $lastVal, $lastEinheit, $lastType, $lastSource);
+        $stmt->bind_result($lastId, $lastVal, $lastEinheit, $lastType);
         $hasLast = $stmt->fetch();
         $stmt->close();
 
         $curVal      = trim($sensorValue);
-        $curEinheit  = trim($einheit);
-        $curType     = trim($type);
-        $curSource   = trim($source);
 
         if ($curVal === '') {
             //$logger->debugMe("Skip history insert: empty value for sensorID=$sensorID");
-            $logger->Info("Skip insert: empty value ('null' || 'NULL' || 'UNDEF') for sensorID=$sensorID Alter Wert $lastVal $lastEinheit bleibt bestehen");
+            $logger->Info("Skip insert: empty value fuer Sensorindex $sensor");
             $db->commit();
             return;
         }
@@ -243,9 +279,8 @@ function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, 
         $isSame =
             $hasLast &&
             $lastVal      === $curVal &&
-            $lastEinheit  === $curEinheit &&
-            $lastType     === $curType &&
-            $lastSource   === $curSource;
+            (int)$lastEinheit === $einheit &&
+            (int)$lastType === $sensorType;
 
         if ($isSame) {
             // nur Touch
@@ -267,12 +302,12 @@ function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, 
 
             $stmtU->close();
             //$logger->debugMe("Touch history: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
-            $logger->debugMe("Touch insert: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
+            $logger->debugMe("Touch insert: id=$lastId, sensor=$sensor, tstamp=$tstamp");
         } else {
             // INSERT (auch wenn nur Einheit geändert wurde!)
             $ins = "INSERT INTO tl_coh_sensorvalue
-                       (tstamp, sensorID, sensorValue, sensorEinheit, sensorValueType, sensorSource)
-                    VALUES (?, ?, ?, ?, ?, ?)";
+                       (tstamp, sensor, sensorValue, einheit, sensorType)
+                    VALUES (?, ?, ?, ?, ?)";
 
             $stmtI = $db->prepare($ins);
             if (!$stmtI) {
@@ -281,7 +316,7 @@ function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, 
                 return;
             }
 
-            $stmtI->bind_param('isssss', $tstamp, $sensorID, $sensorValue, $einheit, $type, $source);
+            $stmtI->bind_param('iisii', $tstamp, $sensor, $sensorValue, $einheit, $sensorType);
 
             if (!$stmtI->execute()) {
                 $logger->Error("exec(insert hist) failed: " . $stmtI->error);
@@ -293,7 +328,7 @@ function insertOrTouchHistory( mysql_dialog $db, string $sensorID, int $tstamp, 
             $stmtI->close();
 
             $logger->debugMe(
-                "Insert history: sensorID=$sensorID, tstamp=$tstamp, value=[" .
+                "Insert history: sensor=$sensor, tstamp=$tstamp, value=[" .
                 var_export($sensorValue, true) . "], einheit=$einheit"
             );
         }
@@ -320,18 +355,21 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
     foreach ($arrResults as $result) {
         // Normalisieren
         $sensorID        = trim((string)($result['sensorID']        ?? ''));
-        $sensorValue     = (string)($result['sensorValue']          ?? '');
+        $rawSensorValue  = $result['sensorValue'] ?? '';
+        $sensorValue     = is_array($rawSensorValue) || is_object($rawSensorValue)
+            ? (string)json_encode($rawSensorValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            : (string)$rawSensorValue;
         $sensorEinheit   = (string)($result['sensorEinheit']        ?? '');
         $sensorValueType = (string)($result['sensorValueType']      ?? '');
-        $sensorSource    = (string)($result['sensorSource']         ?? '');
         $tstamp          = time();
         if ($sensorID === '') {
-            $logger->Error("Leere sensorID in fetchAll()-Result – Eintrag wird übersprungen ($anz). sensorValue $sensorValue sensorSource $sensorSource");
+            $logger->Error("Leere sensorID in fetchAll()-Result – Eintrag wird uebersprungen ($anz)");
             continue;
         }
         // History-Flag holen (kein JOIN mit tl_coh_sensorvalue!)
         try {
-            $history = getHistoryFlag($db, $sensorID);
+            $sensorReference = getSensorReference($db, $sensorID);
+            $history = $sensorReference['history'];
         } catch (\Throwable $e) {
             $logger->Error("history lookup failed for sensorID='$sensorID': " . $e->getMessage());
             continue;
@@ -341,15 +379,20 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
         $logger->debugMe(sprintf( 'SID raw="%s" len=%d hex=%s', $sensorID, strlen($sensorID), bin2hex($sensorID)));
 
         try {
+            if (isJsonSensorValue($sensorValue)) {
+                $sensorEinheit = 'json';
+            }
+            $einheitReference = getLookupReference($db, 'tl_coh_sensoreinheiten', trim($sensorEinheit));
+            $typeReference = getLookupReference($db, 'tl_coh_sensortypen', trim($sensorValueType));
             if ($history === 0) {
                 // genau eine aktuelle Zeile pflegen
                 //upsertCurrentValue($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
                 // geändert 28.04.2026 auch aktuelle werte werdn wenn sie identisch sind nur das datum geändert
                 // aufsummierungen über parameter ausgbe im sensor
-                insertOrTouchHistory($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
+                insertOrTouchHistory($db, $sensorReference['id'], $tstamp, $sensorValue, $einheitReference, $typeReference, $logger);
             } else {
                 // Historie sammeln (aber bei identischem letzten Wert nur tstamp updaten)
-                insertOrTouchHistory($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
+                insertOrTouchHistory($db, $sensorReference['id'], $tstamp, $sensorValue, $einheitReference, $typeReference, $logger);
             }
         } catch (\Throwable $e) {
             // Fehler pro Sensor protokollieren, weiter mit dem nächsten
@@ -412,12 +455,13 @@ function printSensorOverview(array $sensors): void
         return;
     }
 
-    printf("%-28s %-45s %s\n", 'sensorID', 'Sensorname', 'Quelle');
-    echo str_repeat('-', 100) . PHP_EOL;
+    printf("%-28s %-32s %-42s %s\n", 'sensorID', 'sensorLokalId', 'Sensortitel', 'Quelle');
+    echo str_repeat('-', 120) . PHP_EOL;
     foreach ($sensors as $sensor) {
         printf(
-            "%-28s %-45s %s\n",
+            "%-28s %-32s %-42s %s\n",
             (string) $sensor['sensorID'],
+            (string) $sensor['sensorLokalId'],
             (string) $sensor['sensorTitle'],
             (string) $sensor['source']
         );

@@ -174,8 +174,12 @@ class TasmotaSensorService implements SensorFetcherInterface
     private function getDataFromDevice(string $url) { 
 
         try {
-            $url = $url.'/cm?cmnd=Status%2010';    //Request um die daten zu holen 
-            $data = $this->httpClient->getJson($url);
+            $deviceUrl = rtrim($url, '/');
+            $statusUrl = $deviceUrl . '/cm?cmnd=Status%2010';    //Request um die daten zu holen
+            $data = $this->httpClient->getJson($statusUrl);
+            if (!is_array($data)) {
+                throw new \RuntimeException('Keine gültige JSON-Antwort auf Status 10 erhalten.');
+            }
             $this->logger->debugMe("Antwort: " . json_encode($data)); // ? sicher logbar
 /*
             liefert das Array
@@ -188,8 +192,8 @@ class TasmotaSensorService implements SensorFetcherInterface
                 data[StatusSNS][M60][TS_Power_L2]:-1102                  W
                 data[StatusSNS][M60][TS_Power_L3]:-1155                  W
 */
-            $this->dataFromDevice=$data;
-            foreach ($data as $k=>$v) {
+            $this->dataFromDevice = $this->addMissingScriptValues($data, $deviceUrl);
+            foreach ($this->dataFromDevice as $k=>$v) {
                 $this->logger->debugMe("dataFromDevice[$k]:"); // ? sicher logbar
 
                 foreach ($v as $k1=>$v1) {
@@ -207,8 +211,48 @@ class TasmotaSensorService implements SensorFetcherInterface
             $this->logger->debugMe("Tasmota: Fehler bei getDataFromDevice : " . $e->getMessage());
             return null;
         }
-        return $this->dataFromDevice=$data;
+        return $this->dataFromDevice;
         
+    }
+
+    /**
+     * Die per Tasmota-Script berechneten Tages- und Jahreswerte sind nicht in
+     * "Status 10" enthalten. Sie werden deshalb einmal pro Geräteabruf ergänzt,
+     * damit auch der gespeicherte Snapshot alle bisher in Contao genutzten Werte
+     * enthält.
+     */
+    private function addMissingScriptValues(array $data, string $deviceUrl): array
+    {
+        $variables = [
+            'Verbrauch_heute' => 'bez_tag',
+            'Einspeisung_heute' => 'einsp_tag',
+            'Jahr_aktuell' => 'akt_jahr',
+            'Verbrauch_Jahr' => 'bez_jahr',
+            'Einspeisung_Jahr' => 'einsp_jahr',
+            'Jahr_Vorjahr' => 'vor_jahr',
+            'Verbrauch_Vorjahr' => 'bez_vjahr',
+            'Einspeisung_Vorjahr' => 'einsp_vjahr',
+        ];
+
+        if (!isset($data['StatusSNS']) || !is_array($data['StatusSNS'])) {
+            $data['StatusSNS'] = [];
+        }
+
+        foreach ($variables as $jsonName => $scriptVariable) {
+            if (array_key_exists($jsonName, $data['StatusSNS'])) {
+                continue;
+            }
+
+            $scriptUrl = rtrim($deviceUrl, '/') . '/cm?cmnd=' . rawurlencode('script?' . $scriptVariable);
+            $payload = $this->httpClient->getJson($scriptUrl, 15);
+            if (is_array($payload) && array_key_exists($scriptVariable, $payload['script'] ?? [])) {
+                $data['StatusSNS'][$jsonName] = $payload['script'][$scriptVariable];
+            } else {
+                $this->logger->debugMe("Tasmota-Scriptwert '$jsonName' ($scriptVariable) fehlt.");
+            }
+        }
+
+        return $data;
     }
     // funktionen zur normierung des Status
     private function tskWh($stat) {   // tasmota Wert in kwh

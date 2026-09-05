@@ -11,6 +11,11 @@ use PbdKn\cohSensorcollector\mysql_dialog;
 
 class WasserLeckageService implements SensorFetcherInterface
 {
+    private const SMALL_KEYS = [
+        'VLV','BAT','FLO','BAR','CEL','PRF','SRN','VER','WIP','WGW','MAC1','EIP','EGW','MAC2','WFS','WFR',
+        'ALA','WRN','NOT','ALM','ALW','ALN','VOL','CND','WTI','CEN','DSV','DRP','DTT','DTC','DOM','DST','DMA',
+        'MM','DBD','DBT','DPL','DCM','AMA','ALD','SLP','SLE','SLV','SLT','SLF','SOF','SLO','SMF',
+    ];
 
 
     public function __construct( private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient) {}   
@@ -79,7 +84,6 @@ class WasserLeckageService implements SensorFetcherInterface
             // Zugriff auf Werte, z.B.:
             foreach ($sensors as $sensor) {
                 $sensorID=$sensor['sensorID'];
-                $outputMode=strtolower($sensor['outputMode']);   // derzeit absolut, da kann evtl dayly 7Tage 30 tage oder 365 tage sehten muss nioch gemacht werden
                 $SensorlokalId=$sensor['sensorLokalId'];    
                 if (empty($sensor['sensorLokalId'])) {
                     $this->logger->Info("keine Werte bei sensorID $sensorID Soll z.b vol");   
@@ -89,7 +93,7 @@ class WasserLeckageService implements SensorFetcherInterface
                 $einheit=$resultVal['sensorEinheit'];  
                 $value=$resultVal['sensorValue'];  
                 
-                $this->logger->debugMe( "WasserLeckage Sensorservice SensorID  ".$sensor['sensorID']." SensorlokalId $SensorlokalId outputMode $outputMode value $value Einheit  $einheit type " . $resultVal['sensorValueType']);  
+                $this->logger->debugMe( "WasserLeckage Sensorservice SensorID  ".$sensor['sensorID']." SensorlokalId $SensorlokalId value $value Einheit $einheit type " . $resultVal['sensorValueType']);
                 if ($value === null) {
                     $this->logger->Info('WasserLeckage Sensorservice keinen wert für sensorID: ' . $sensor['sensorID'] . ' sensorLokalId: ' . $sensor['sensorLokalId']);
                 } else {    
@@ -99,8 +103,7 @@ class WasserLeckageService implements SensorFetcherInterface
                         'sensorValue'       => $value,
                         'sensorEinheit'     => $einheit,
                         'sensorValueType'   => $resultVal['sensorValueType'],
-                        'sensorSource'      => strtolower($sensor['sensorSource']),
-                        'outputMode'        => strtolower($sensor['outputMode'])
+                        'sensorSource'      => strtolower($sensor['sensorSource'])
                     ];
 /*
                     $this->connection->update('tl_coh_sensors', [
@@ -150,28 +153,6 @@ class WasserLeckageService implements SensorFetcherInterface
         }     
         return $data;
     }
-    /*
-     * liefert den ersten werte ab den startdatum
-     */
-    private function getValueFromStartday ($sensorID,$startOfDay) {
-        
-        $conn = $this->db->getConnection();
-        // erster Wert ab $startOfDay
-        $sqlFirst = "
-            SELECT sensorValue
-            FROM tl_coh_sensorvalue
-            WHERE sensorID = '".$conn->real_escape_string($sensorID)."'
-            AND tstamp >= $startOfDay
-            ORDER BY tstamp ASC
-            LIMIT 1
-        ";
-        $resFirst = $conn->query($sqlFirst);
-        if (!$resFirst || !$rowFirst = $resFirst->fetch_assoc()) {
-            return 0;
-        }
-        $firstValue = (float)$rowFirst['sensorValue'];   
-        return $firstValue;
-    }
     /*  liefert den wert vom WasserLeckage aus 
                             'sensorID'        => $sensor['sensorID'],
                         'sensorValue'     => $value,
@@ -181,15 +162,24 @@ class WasserLeckageService implements SensorFetcherInterface
      */
     private function getWasserLeckagedata ($sensor): ?array {
         $name=$sensor['sensorLokalId'];
-        $outputMode=$sensor['outputMode'];
-        $sensorID=$sensor['sensorID'];
         $res=[];
         $name = strtoupper($name);
+        if ($name === 'ALL') {
+            return ['sensorValue' => $this->dataFromDevice, 'sensorEinheit' => 'json', 'sensorValueType' => 'json'];
+        }
+        if ($name === 'SMALL') {
+            $selection = [];
+            foreach (self::SMALL_KEYS as $key) {
+                $payloadKey = 'get' . $key;
+                if (array_key_exists($payloadKey, $this->dataFromDevice)) {
+                    $selection[$key] = $this->dataFromDevice[$payloadKey];
+                }
+            }
+            return ['sensorValue' => $selection, 'sensorEinheit' => 'json', 'sensorValueType' => 'json'];
+        }
         $syrName= "get".$name;      // wertbezeichnng aus Syr
             
         if (isset($this->dataFromDevice[$syrName]) )  { 
-            $aV =  $this->dataFromDevice[$syrName];
-        } elseif (isset($this->dataFromDevice[$w]) ) {
             $aV =  $this->dataFromDevice[$syrName];
         } else {
             $this->logger->Info("getWasserLeckagedata name $name  syrName $syrName undefined");
@@ -217,28 +207,6 @@ class WasserLeckageService implements SensorFetcherInterface
                 break;
             default:
                 break;
-        }
-        $dt = new \DateTime('today midnight');            
-        switch ($outputMode) {
-            case 'daily':   $startOfDay = $dt->getTimestamp();
-                            //$firstValue=$this->getValueFromStartday ($sensorID,$startOfDay);
-                            $aV= $aV - $this->getValueFromStartday ($sensorID,$startOfDay);
-                            $aT = date('d.m.Y H:i:s', $startOfDay);
-                            break;
-            case 'woche':   $dt->modify('-7 days'); $startOfDay = $dt->getTimestamp();
-                            $aV= $aV - $this->getValueFromStartday ($sensorID,$startOfDay);
-                            $aT = date('d.m.Y H:i:s', $startOfDay);
-                            break;
-            case 'monat':   $dt->modify('-30 days'); $startOfDay = $dt->getTimestamp();
-                            $aV= $aV - $this->getValueFromStartday ($sensorID,$startOfDay);
-                            $aT = date('d.m.Y H:i:s', $startOfDay);
-                            break;
-            case 'jahr':    $dt->modify('-365 days'); $startOfDay = $dt->getTimestamp();
-                            $aV= $aV - $this->getValueFromStartday ($sensorID,$startOfDay);
-                            $aT = date('d.m.Y H:i:s', $startOfDay);
-                            break;
-            case 'absolute':
-            default: break;
         }
         $res['sensorValue']=$aV;
         $res['sensorEinheit']=$aE;

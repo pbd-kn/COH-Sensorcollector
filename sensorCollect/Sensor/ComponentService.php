@@ -73,25 +73,25 @@ $this->logger->debugMe( "ComponentService bearbeiteten Sensor lokalAccess $lokal
                 $formula = trim($formula);
                 $this->logger->debugMe("ComponentService: formula=".$formula);
                 $sql = "
-                    SELECT s1.*, s3.*
+                    SELECT s1.*, s3.*, s3.sensorID AS sensorName
                     FROM tl_coh_sensorvalue s1
+                    JOIN tl_coh_sensors s3 ON s1.sensor = s3.id
                     JOIN (
-                        SELECT sensorID, MAX(tstamp) AS max_ts
-                        FROM tl_coh_sensorvalue
-                        WHERE sensorID IN ($inList)
-                        GROUP BY sensorID
+                        SELECT v.sensor, MAX(v.tstamp) AS max_ts
+                        FROM tl_coh_sensorvalue v
+                        JOIN tl_coh_sensors s ON v.sensor = s.id
+                        WHERE s.sensorID IN ($inList)
+                        GROUP BY v.sensor
                     ) m
-                    ON s1.sensorID = m.sensorID AND s1.tstamp = m.max_ts
-                    LEFT JOIN tl_coh_sensors s3
-                        ON s1.sensorID = s3.sensorID
-                    ORDER BY FIELD(s1.sensorID, $inList)
+                    ON s1.sensor = m.sensor AND s1.tstamp = m.max_ts
+                    ORDER BY FIELD(s3.sensorID, $inList)
                 ";
                 $result = $conn->query($sql);
                 $cSensors = [];
 
                 if ($result) {
                     while ($row = $result->fetch_assoc()) {
-                        $cSensors[$row['sensorID']] = $row;
+                        $cSensors[$row['sensorName']] = $row;
                         //$this->logger->debugMe( "ComponentService: DB sensor=".$row['sensorID']. " value=".$row['sensorValue']);
                     }
                 }
@@ -320,8 +320,8 @@ private function getDailyValue(string $sensorID): float
         // erster Wert des Tages
         $sqlFirst = "
             SELECT sensorValue
-            FROM tl_coh_sensorvalue
-            WHERE sensorID = '".$conn->real_escape_string($sensorID)."'
+            FROM tl_coh_sensorvalue v JOIN tl_coh_sensors s ON v.sensor=s.id
+            WHERE s.sensorID = '".$conn->real_escape_string($sensorID)."'
             AND tstamp >= $startOfDay
             ORDER BY tstamp ASC
             LIMIT 1
@@ -338,8 +338,8 @@ private function getDailyValue(string $sensorID): float
         // letzter Wert
         $sqlLast = "
             SELECT sensorValue
-            FROM tl_coh_sensorvalue
-            WHERE sensorID = '".$conn->real_escape_string($sensorID)."'
+            FROM tl_coh_sensorvalue v JOIN tl_coh_sensors s ON v.sensor=s.id
+            WHERE s.sensorID = '".$conn->real_escape_string($sensorID)."'
             ORDER BY tstamp DESC
             LIMIT 1
         ";

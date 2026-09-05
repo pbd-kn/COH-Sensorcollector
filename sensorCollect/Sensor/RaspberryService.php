@@ -75,13 +75,23 @@ class RaspberryService implements SensorFetcherInterface
                 } else {
                     $lokalAccess=$sensor['sensorLokalId'];
                 }
-                
-                $value = $this->raspBerryCmd($url,$lokalAccess);
+
+                if (strcasecmp((string) $lokalAccess, 'raspberry.all') === 0) {
+                    $snapshot = $this->getStatusSnapshot();
+                    $value = $snapshot['values'] ?? null;
+                } else {
+                    $value = $this->raspBerryCmd($url,$lokalAccess);
+                }
                 if ($value === '' || $value === null) {
                     $this->logger->Error('raspberry raspBerryCmd für SensorID '.$sensor['sensorID']." lokaladress $lokalAccess value empty");  
                 }
-                $einheit=$sensor['sensorEinheit'];  
-                if (!empty($sensor['transFormProcedur'])) {
+                $einheit=$sensor['sensorEinheit'];
+                $valueType = $sensor['sensorValueType'];
+                if (is_array($value) || is_object($value)) {
+                    $einheit = 'json';
+                    $valueType = 'json';
+                }
+                if (!empty($sensor['transFormProcedur']) && $sensor['transFormProcedur'] !== '-') {
                     if (method_exists($this, $sensor['transFormProcedur'])) {
                         $arr = $this->{$sensor['transFormProcedur']}($value);
                         $einheit=$arr['einheit'];                    
@@ -90,12 +100,15 @@ class RaspberryService implements SensorFetcherInterface
                         $this->logger->Error('raspberry transFormProcedur '.$sensor['transFormProcedur'].' für SensorID  '.$sensor['sensorID'].' existiert nicht');  
                     }                 
                 }                   
-                $this->logger->debugMe('raspberry Sensorservice SensorID  '.$sensor['sensorID']." lokalAccess $lokalAccess value $value Einheit $einheit");  
+                $logValue = is_array($value) || is_object($value)
+                    ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : (string) $value;
+                $this->logger->debugMe('raspberry Sensorservice SensorID  '.$sensor['sensorID']." lokalAccess $lokalAccess value $logValue Einheit $einheit");
                 $res[$sensor['sensorID']] = [
                     'sensorID'        => $sensor['sensorID'],
                     'sensorValue'     => $value,
                     'sensorEinheit'   => $einheit,
-                    'sensorValueType' => $sensor['sensorValueType'],
+                    'sensorValueType' => $valueType,
                     'sensorSource'    => $sensor['sensorSource'],
                 ];
                 //$this->logger->debugMe("sensorID ".$sensor['sensorID']." value: $value");
@@ -120,6 +133,18 @@ class RaspberryService implements SensorFetcherInterface
             return null;
         }
         return $res;
+    }
+
+    private function getStatusSnapshot(): ?array
+    {
+        $url = 'http://127.0.0.1/api/coh/raspberry-status.php?token=' . rawurlencode('COH_CODE');
+        $payload = $this->httpClient->getJson($url, 15);
+        if (!is_array($payload) || empty($payload['ok']) || !is_array($payload['values'] ?? null)) {
+            $this->logger->Error('Raspberry: lokale Status-API lieferte keine gueltigen values.');
+            return null;
+        }
+
+        return $payload;
     }
     private function raspBerryCmd($url,$cmd) {
         // Whitelist für erlaubte Kommandos

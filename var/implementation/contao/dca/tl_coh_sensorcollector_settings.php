@@ -70,7 +70,7 @@ $GLOBALS['TL_DCA']['tl_coh_sensorcollector_settings'] = [
         // Legacy-Feld fuer die Migration bestehender Installationen.
         'raspberryApiBaseUrl' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'http://192.168.178.49'"],
         'raspberryApiToken' => ['inputType' => 'text', 'eval' => ['hideInput' => true, 'maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default ''"],
-        'raspberryApiWanBaseUrl' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'http://p1pu92iv4i9yh2m2.myfritz.net'"],
+        'raspberryApiWanBaseUrl' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'https://p1pu92iv4i9yh2m2.myfritz.net'"],
         'raspberryApiTimeout' => ['inputType' => 'text', 'eval' => ['rgxp' => 'natural', 'tl_class' => 'w50'], 'sql' => "smallint(5) unsigned NOT NULL default 10"],
         'raspberryApiPath' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default '/api/coh/raspberry-status.php'"],
         'tasmotaAccess' => [
@@ -80,7 +80,7 @@ $GLOBALS['TL_DCA']['tl_coh_sensorcollector_settings'] = [
             'eval' => ['mandatory' => true, 'submitOnChange' => true, 'tl_class' => 'clr'],
             'sql' => "varchar(16) NOT NULL default 'local'",
         ],
-        'tasmotaRaspberryBaseUrl' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'http://p1pu92iv4i9yh2m2.myfritz.net'"],
+        'tasmotaRaspberryBaseUrl' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'https://p1pu92iv4i9yh2m2.myfritz.net'"],
         'tasmotaRaspberryToken' => ['inputType' => 'text', 'eval' => ['hideInput' => true, 'maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'COH_CODE'"],
         'tasmotaRaspberryPath' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default '/api/coh/tasmota.php'"],
         'tasmotaRequestTimeout' => ['inputType' => 'text', 'eval' => ['rgxp' => 'natural', 'tl_class' => 'w50'], 'sql' => "smallint(5) unsigned NOT NULL default 15"],
