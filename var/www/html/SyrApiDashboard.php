@@ -3,10 +3,37 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+session_set_cookie_params([
+    'secure' => true,
+    'httponly' => true,
+    'samesite' => 'Strict',
+]);
+session_start();
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = (string) $_SESSION['csrf_token'];
+
+function requireValidPost(string $csrfToken): void
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        http_response_code(405);
+        header('Allow: POST');
+        exit('Diese Aktion ist nur per POST erlaubt.');
+    }
+
+    $providedToken = (string) ($_POST['csrf_token'] ?? '');
+    if ($providedToken === '' || !hash_equals($csrfToken, $providedToken)) {
+        http_response_code(403);
+        exit('Ungültige oder abgelaufene Anfrage. Bitte die Seite neu laden.');
+    }
+}
+
 // ---------------------------------------------------
 // API Basis
 // ---------------------------------------------------
-$url = "http://192.168.178.65:5333";
+$url = "http://192.168.178.88:5333";
 $baseGet = $url . "/trio/get/";
 $baseSet = $url . "/trio/set/";
 $dH = 7.9;   // geschätzte Wasserhärte
@@ -49,6 +76,7 @@ function syrGetAll($baseGet)
 // PROFIL SETZEN
 // ---------------------------------------------------
 if (isset($_POST['setProfile'])) {
+    requireValidPost($csrfToken);
     $p = (int)($_POST['profile'] ?? 1);
     if ($p >= 1 && $p <= 8) {
         @file_get_contents($baseSet . "pa" . $p . "/true"); // Profil aktivieren
@@ -62,6 +90,7 @@ if (isset($_POST['setProfile'])) {
 // LECKAGEWERT / MIKROLECKAGE / TEST SETZEN
 // ---------------------------------------------------
 if (isset($_POST['setType'])) {
+    requireValidPost($csrfToken);
     $type = $_POST['setType'] ?? '';
     $valueRaw = $_POST['value'] ?? '';
     $profile = (int)($_POST['profile'] ?? 1);
@@ -133,8 +162,9 @@ if (isset($_POST['setType'])) {
 // ---------------------------------------------------
 // VENTIL STEUERUNG
 // ---------------------------------------------------
-if (isset($_GET['action'])) {
-    $action = $_GET['action'];
+if (isset($_POST['action'])) {
+    requireValidPost($csrfToken);
+    $action = (string) $_POST['action'];
     $target = null;
     $cmd = '';
 
@@ -794,12 +824,20 @@ function decodeWifiStatus($wfs)
                     <div>🚰 Ventil</div>
                     <div class="big"><?= htmlspecialchars($valve) ?></div>
                     <div style="display:flex;gap:6px;margin-top:10px;">
-                        <a href="<?= $disableOpen ? '#' : '?action=syropenventil' ?>" class="btn btn-open action-btn <?= $disableOpen ? 'btn-disabled' : '' ?>"
-                            onclick="<?= $disableOpen ? 'return false;' : "return handleAction(this,'Ventil öffnen?');" ?>">Öffnen
-                        </a>
-                        <a href="<?= $disableClose ? '#' : '?action=syrcloseventil' ?>" class="btn btn-close action-btn <?= $disableClose ? 'btn-disabled' : '' ?>"
-                            onclick="<?= $disableClose ? 'return false;' : "return handleAction(this,'Ventil schließen?');" ?>">Schließen
-                        </a>
+                        <form method="post" style="display:flex;flex:1;margin:0;">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
+                            <input type="hidden" name="action" value="syropenventil">
+                            <button type="submit" class="btn btn-open action-btn <?= $disableOpen ? 'btn-disabled' : '' ?>"
+                                <?= $disableOpen ? 'disabled' : '' ?>
+                                onclick="return handleAction(this,'Ventil öffnen?');">Öffnen</button>
+                        </form>
+                        <form method="post" style="display:flex;flex:1;margin:0;">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
+                            <input type="hidden" name="action" value="syrcloseventil">
+                            <button type="submit" class="btn btn-close action-btn <?= $disableClose ? 'btn-disabled' : '' ?>"
+                                <?= $disableClose ? 'disabled' : '' ?>
+                                onclick="return handleAction(this,'Ventil schließen?');">Schließen</button>
+                        </form>
                     </div>
                     <div id="waitingNote" class="waiting-note"></div>
                 </div>
@@ -833,6 +871,7 @@ function decodeWifiStatus($wfs)
                     <div>⚙️ Profil</div>
                     <div class="big"><?= (int)$aktprf ?></div>
                     <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
                         <select name="profile">
                             <?php for ($i = 1; $i <= 8; $i++): ?>
                                 <option value="<?= $i ?>" <?= $i == $aktprf ? 'selected' : '' ?>><?= $i ?></option>
@@ -1089,6 +1128,7 @@ function decodeWifiStatus($wfs)
             box.innerHTML = `
                 <form method="post">
                     <h3>${typeLabel}</h3>
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
                     <input type="hidden" name="setType" value="${escapeHtml(type)}">
                     <input type="hidden" name="profile" value="${activeProfile}">
                     ${field}
