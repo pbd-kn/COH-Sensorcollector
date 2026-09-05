@@ -14,6 +14,72 @@ if (!hash_equals($API_TOKEN, $token)) {
     echo json_encode(['ok'=>false,'error'=>'unauthorized']);
     exit;
 }
+
+// ---------------- CONFIG EXPORT ----------------
+// Liefert ausschliesslich Geraete- und Sensorkonfigurationen. Sensorwerte
+// sind absichtlich nicht Bestandteil dieses Endpunkts.
+if ('GET' === ($_SERVER['REQUEST_METHOD'] ?? 'GET')) {
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+    try {
+        $db = new mysqli($DB['host'], $DB['user'], $DB['pass'], $DB['db'], $DB['port']);
+        $db->set_charset('utf8mb4');
+
+        $fetchRows = static function (mysqli $db, string $tableName): array {
+            $rows = [];
+            $result = $db->query("SELECT * FROM `$tableName` ORDER BY id");
+            while ($row = $result->fetch_assoc()) {
+                $rows[] = $row;
+            }
+
+            return $rows;
+        };
+
+        echo json_encode([
+            'ok' => true,
+            'devices' => $fetchRows($db, 'tl_coh_geraete'),
+            'sensors' => $fetchRows($db, 'tl_coh_sensors'),
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+    }
+
+    exit;
+}
+
+// ---------------- CONFIG EXPORT ----------------
+// Liefert ausschliesslich Geraete- und Sensorkonfigurationen. Sensorwerte
+// sind absichtlich nicht Bestandteil dieses Endpunkts.
+if ('GET' === ($_SERVER['REQUEST_METHOD'] ?? 'GET')) {
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+    try {
+        $db = new mysqli($DB['host'], $DB['user'], $DB['pass'], $DB['db'], $DB['port']);
+        $db->set_charset('utf8mb4');
+
+        $fetchRows = static function (mysqli $db, string $tableName): array {
+            $rows = [];
+            $result = $db->query("SELECT * FROM `$tableName` ORDER BY id");
+            while ($row = $result->fetch_assoc()) {
+                $rows[] = $row;
+            }
+
+            return $rows;
+        };
+
+        echo json_encode([
+            'ok' => true,
+            'devices' => $fetchRows($db, 'tl_coh_geraete'),
+            'sensors' => $fetchRows($db, 'tl_coh_sensors'),
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+    }
+
+    exit;
+}
 // ---------------- JSON ----------------
 $raw = file_get_contents('php://input');
 $data = json_decode($raw, true);
@@ -24,12 +90,16 @@ if (!is_array($data)) {
 }
 $table = $data['table'] ?? '';
 $rows  = $data['rows'] ?? [];
-if (!in_array($table, $allowedTables, true)) {
+$isConfigSnapshot = isset($data['devices'], $data['sensors'])
+    && is_array($data['devices'])
+    && is_array($data['sensors']);
+
+if (!$isConfigSnapshot && !in_array($table, $allowedTables, true)) {
     http_response_code(400);
     echo json_encode(['ok'=>false,'error'=>'table_not_allowed']);
     exit;
 }
-if (!is_array($rows)) {
+if (!$isConfigSnapshot && !is_array($rows)) {
     http_response_code(400);
     echo json_encode(['ok'=>false,'error'=>'rows_missing']);
     exit;
@@ -39,6 +109,98 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 try {
     $db = new mysqli($DB['host'], $DB['user'], $DB['pass'], $DB['db'], $DB['port']);
     $db->set_charset('utf8mb4');
+
+    // Atomarer Komplettabgleich fuer den manuellen Contao-Backend-Button.
+    // Messwerte werden dabei weder gelesen noch veraendert.
+    if ($isConfigSnapshot) {
+        $syncTable = static function (
+            mysqli $db,
+            string $tableName,
+            array $tableRows,
+            string $identityField,
+            array $protectedFields = []
+        ): array {
+            $existingCols = [];
+            $columnResult = $db->query("SHOW COLUMNS FROM `$tableName`");
+            while ($column = $columnResult->fetch_assoc()) {
+                $existingCols[$column['Field']] = true;
+            }
+
+            $receivedIdentities = [];
+            $inserted = 0;
+            $updated = 0;
+
+            foreach ($tableRows as $row) {
+                if (!is_array($row) || !isset($row[$identityField]) || '' === trim((string) $row[$identityField])) {
+                    throw new RuntimeException("Ungueltiger Datensatz fuer $tableName: $identityField fehlt");
+                }
+
+                $receivedIdentities[] = (string) $row[$identityField];
+                $filtered = array_intersect_key($row, $existingCols);
+                $filtered = array_diff_key($filtered, array_flip($protectedFields));
+                $fields = array_keys($filtered);
+                $values = array_values($filtered);
+                $columnList = '`'.implode('`,`', $fields).'`';
+                $placeholders = implode(',', array_fill(0, count($values), '?'));
+                $types = str_repeat('s', count($values));
+                $updateParts = [];
+
+                foreach ($fields as $field) {
+                    $updateParts[] = "`$field`=VALUES(`$field`)";
+                }
+
+                $statement = $db->prepare(
+                    "INSERT INTO `$tableName` ($columnList) VALUES ($placeholders) "
+                    .'ON DUPLICATE KEY UPDATE '.implode(',', $updateParts)
+                );
+                $statement->bind_param($types, ...$values);
+                $statement->execute();
+
+                if (1 === $statement->affected_rows) {
+                    ++$inserted;
+                } elseif (2 === $statement->affected_rows) {
+                    ++$updated;
+                }
+
+                $statement->close();
+            }
+
+            if ([] === $receivedIdentities) {
+                $db->query("DELETE FROM `$tableName`");
+            } else {
+                $escaped = array_map(
+                    static fn (string $value): string => "'".$db->real_escape_string($value)."'",
+                    array_values(array_unique($receivedIdentities))
+                );
+                $db->query(
+                    "DELETE FROM `$tableName` WHERE `$identityField` NOT IN (".implode(',', $escaped).')'
+                );
+            }
+
+            return ['received' => count($tableRows), 'inserted' => $inserted, 'updated' => $updated];
+        };
+
+        $db->begin_transaction();
+
+        $deviceResult = $syncTable($db, 'tl_coh_geraete', $data['devices'], 'geraeteID');
+        $sensorResult = $syncTable(
+            $db,
+            'tl_coh_sensors',
+            $data['sensors'],
+            'sensorID',
+            ['historycount', 'lastUpdated', 'pollInterval', 'lastValue', 'lastError']
+        );
+
+        $db->commit();
+
+        echo json_encode([
+            'ok' => true,
+            'devices' => $deviceResult,
+            'sensors' => $sensorResult,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ---------------- Spalten lesen ----------------
     $existingCols = [];
     $res = $db->query("SHOW COLUMNS FROM `$table`");
