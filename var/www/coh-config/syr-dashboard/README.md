@@ -13,6 +13,35 @@ Webroots `/var/www/html`.
 HTTP-Basic-Authentifizierung von Apache. Die Kennwörter stehen nicht in dieser
 Konfigurationsdatei, sondern in `/etc/apache2/.coh-dashboard-users`.
 
+## Datei vom PC auf den Raspberry Pi übertragen
+
+Die Datei `apache-auth.conf` wird nicht durch einen Apache-Befehl erzeugt. Sie
+liegt im lokalen Git-Projekt und muss zunächst auf den Raspberry Pi übertragen
+werden.
+
+In PowerShell auf dem PC ausführen:
+
+```powershell
+scp -o KexAlgorithms=curve25519-sha256 `
+  -i C:\Users\pbd\.ssh\id_ed25519_codex_raspi `
+  C:\wampneu\www\co5\co5Bundles\COH-Sensorcollector\var\www\coh-config\syr-dashboard\apache-auth.conf `
+  peter@192.168.178.49:/home/peter/apache-auth.conf
+```
+
+Danach per SSH auf dem Raspberry Pi anmelden und die Datei außerhalb des
+öffentlichen Webroots ablegen:
+
+```bash
+sudo mkdir -p /var/www/coh-config/syr-dashboard
+sudo cp /home/peter/apache-auth.conf /var/www/coh-config/syr-dashboard/apache-auth.conf
+sudo chmod 644 /var/www/coh-config/syr-dashboard/apache-auth.conf
+rm /home/peter/apache-auth.conf
+```
+
+Erst jetzt ist die in den folgenden Befehlen verwendete Quelldatei
+`/var/www/coh-config/syr-dashboard/apache-auth.conf` auf dem Raspberry Pi
+vorhanden.
+
 ## Einmalige Einrichtung auf dem Raspberry Pi
 
 Das für `htpasswd` benötigte Paket installieren, falls es noch fehlt:
