@@ -720,8 +720,32 @@ if ($consoleMode && !runConsoleTest($manager, $db, $logger)) {
 $iteration = 0;
 $logger->Info("Restart: " . date('d.m.Y H:i:s'));
 
+function collectorQuietPeriodWakeUp(\DateTimeImmutable $now): ?\DateTimeImmutable
+{
+    $hour = (int) $now->format('G');
+    if ($hour >= 19) {
+        return $now->modify('tomorrow')->setTime(6, 0);
+    }
+    if ($hour < 6) {
+        return $now->setTime(6, 0);
+    }
+
+    return null;
+}
+
 while (true) {
     $iteration++;
+
+    // Zwischen 19:00 Uhr und 06:00 Uhr weder Sensoren lesen noch Werte speichern.
+    $now = new \DateTimeImmutable('now');
+    $wakeUp = collectorQuietPeriodWakeUp($now);
+    if ($wakeUp !== null) {
+        $sleepSeconds = max(1, $wakeUp->getTimestamp() - $now->getTimestamp());
+        $logger->Info('Ruhezeit aktiv: keine Sensorabfrage bis '.$wakeUp->format('d.m.Y H:i:s').'.');
+        sleep($sleepSeconds);
+        continue;
+    }
+
     // --- Konfiguration laden ---
     try {
         $pollTime = loadCollectorConfiguration($db, $logger, $SensorParameter);
@@ -757,8 +781,8 @@ while (true) {
         $logger->Error("cleanup failed beim Loeschen alter Saetze");
     }
     // Sleep
-    $newPoll=$SensorParameter->getpollTime();
-    $sleepSeconds = max(1, $newPoll) * 60;
-    $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor ($anz) Sleep (Minuten): $pollTime");
+    $sleepMinutes = max(1, (int) $SensorParameter->getpollTime());
+    $sleepSeconds = $sleepMinutes * 60;
+    $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor ($anz) Sleep (Minuten): $sleepMinutes");
     sleep($sleepSeconds);
 }

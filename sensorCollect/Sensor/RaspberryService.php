@@ -45,6 +45,7 @@ class RaspberryService implements SensorFetcherInterface
     public function fetchArr(array $sensors): ?array // neue Methode
     {   
         $res=array();
+        $statusSnapshot = null;
         try {
             if (count($sensors) > 0) {
                 $url=$sensors[0]['geraeteUrl'];
@@ -76,9 +77,9 @@ class RaspberryService implements SensorFetcherInterface
                     $lokalAccess=$sensor['sensorLokalId'];
                 }
 
-                if (strcasecmp((string) $lokalAccess, 'raspberry.all') === 0) {
-                    $snapshot = $this->getStatusSnapshot();
-                    $value = $snapshot['values'] ?? null;
+                if ($this->isStatusPath((string) $lokalAccess)) {
+                    $statusSnapshot ??= $this->getStatusSnapshot();
+                    $value = $this->statusValue($statusSnapshot, (string) $lokalAccess);
                 } else {
                     $value = $this->raspBerryCmd($url,$lokalAccess);
                 }
@@ -137,7 +138,12 @@ class RaspberryService implements SensorFetcherInterface
 
     private function getStatusSnapshot(): ?array
     {
-        $url = 'http://127.0.0.1/api/coh/raspberry-status.php?token=' . rawurlencode('COH_CODE');
+        $token = trim((string) getenv('COH_API_TOKEN'));
+        if ($token === '') {
+            $this->logger->Error('Raspberry: COH_API_TOKEN ist nicht konfiguriert.');
+            return null;
+        }
+        $url = 'http://127.0.0.1/api/coh/raspberry-status.php?token=' . rawurlencode($token);
         $payload = $this->httpClient->getJson($url, 15);
         if (!is_array($payload) || empty($payload['ok']) || !is_array($payload['values'] ?? null)) {
             $this->logger->Error('Raspberry: lokale Status-API lieferte keine gueltigen values.');
@@ -146,6 +152,50 @@ class RaspberryService implements SensorFetcherInterface
 
         return $payload;
     }
+
+    private function isStatusPath(string $path): bool
+    {
+        $normalized = strtolower(trim($path));
+
+        return $normalized === 'raspberry.all'
+            || $normalized === 'raspberry.system'
+            || $normalized === 'raspberry.heating'
+            || $normalized === 'raspberry.backup'
+            || str_starts_with($normalized, 'raspberry.system.')
+            || str_starts_with($normalized, 'raspberry.heating.')
+            || str_starts_with($normalized, 'raspberry.backup.')
+            || str_starts_with($normalized, 'system.')
+            || str_starts_with($normalized, 'heating.')
+            || str_starts_with($normalized, 'backup.');
+    }
+
+    private function statusValue(?array $snapshot, string $path): mixed
+    {
+        if (!is_array($snapshot) || !is_array($snapshot['values'] ?? null)) {
+            return null;
+        }
+
+        $values = $snapshot['values'];
+        $normalized = trim($path);
+        if (strcasecmp($normalized, 'raspberry.all') === 0) {
+            return $values;
+        }
+        if (str_starts_with(strtolower($normalized), 'raspberry.')) {
+            $normalized = substr($normalized, strlen('raspberry.'));
+        }
+
+        $value = $values;
+        foreach (explode('.', $normalized) as $segment) {
+            if (!is_array($value) || !array_key_exists($segment, $value)) {
+                $this->logger->Error("Raspberry: Statuspfad '$path' ist nicht verfügbar.");
+                return null;
+            }
+            $value = $value[$segment];
+        }
+
+        return $value;
+    }
+
     private function raspBerryCmd($url,$cmd) {
         // Whitelist für erlaubte Kommandos
         $whitelist = ['checkPhpHeizungserver.sh', 

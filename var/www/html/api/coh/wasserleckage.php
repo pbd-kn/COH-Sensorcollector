@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__.'/api_env.php';
+
 const SYR_KEYS = [
     'VLV','BAT','FLO','BAR','CEL','PRF','SRN','VER','WIP','WGW','MAC1','EIP','EGW','MAC2','WFS','WFR',
     'ALA','WRN','NOT','ALM','ALW','ALN','VOL','CND','WTI','CEN','DSV','DRP','DTT','DTC','DOM','DST','DMA',
@@ -84,7 +86,7 @@ function singleValue(array $payload, string $key): mixed
     return count($payload) === 1 ? reset($payload) : null;
 }
 
-$expectedToken = (string) (getenv('COH_API_TOKEN') ?: 'COH_CODE');
+$expectedToken = cohRequireApiToken();
 $providedToken = requestHeader('X-COH-TOKEN');
 if ($expectedToken === '' || $providedToken === '' || !hash_equals($expectedToken, $providedToken)) {
     respond(401, ['ok' => false, 'error' => 'Unauthorized']);

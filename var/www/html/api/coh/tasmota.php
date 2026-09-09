@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
-const COH_API_TOKEN = 'COH_CODE';
+require_once __DIR__.'/api_env.php';
+$configuredToken = cohRequireApiToken();
 
 function respond(int $status, array $payload): never
 {
@@ -28,7 +29,7 @@ function isPrivateDeviceHost(string $host): bool
 }
 
 $token = $_SERVER['HTTP_X_COH_TOKEN'] ?? ($_GET['token'] ?? '');
-if (!hash_equals(COH_API_TOKEN, (string) $token)) {
+if (!hash_equals($configuredToken, (string) $token)) {
     respond(401, ['ok' => false, 'error' => 'unauthorized']);
 }
 

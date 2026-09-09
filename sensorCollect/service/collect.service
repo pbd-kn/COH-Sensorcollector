@@ -7,10 +7,10 @@ StartLimitIntervalSec=0
 User=peter
 Type=simple
 WorkingDirectory=/home/peter/scripts/coh/sensorcollect
+EnvironmentFile=-/home/peter/scripts/coh/.env.local
 ExecStart=/usr/bin/php /home/peter/scripts/coh/sensorcollect/collect.php
 Restart=always
 RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
-

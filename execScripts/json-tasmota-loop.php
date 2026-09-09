@@ -35,7 +35,15 @@ $mode = strtolower((string) ($options['mode'] ?? ($params['mode'] ?? 'local')));
 $deviceUrl = normalizeBaseUrl((string) ($options['url'] ?? ($localConfig['deviceUrl'] ?? 'http://192.168.178.69')));
 $httpBaseUrl = normalizeBaseUrl((string) ($options['http-url'] ?? ($httpConfig['baseUrl'] ?? 'http://192.168.178.49')));
 $httpPath = '/' . ltrim((string) ($options['http-path'] ?? ($httpConfig['path'] ?? '/api/coh/tasmota.php')), '/');
-$httpToken = (string) ($options['token'] ?? ($httpConfig['token'] ?? 'COH_CODE'));
+$envToken = getenv('COH_API_TOKEN');
+if ((!is_string($envToken) || trim($envToken) === '') && is_readable(dirname(__DIR__).'/.env.local')) {
+    $localEnv = parse_ini_file(dirname(__DIR__).'/.env.local', false, INI_SCANNER_RAW);
+    $envToken = is_array($localEnv) ? ($localEnv['COH_API_TOKEN'] ?? '') : '';
+}
+$httpToken = trim((string) ($options['token'] ?? ($httpConfig['token'] ?? $envToken)));
+if ($mode === 'http' && $httpToken === '') {
+    throw new RuntimeException('COH_API_TOKEN ist nicht konfiguriert.');
+}
 $timeout = max(1, (int) ($options['timeout'] ?? ($params['timeout'] ?? 15)));
 
 if (!in_array($mode, ['local', 'http'], true)) {

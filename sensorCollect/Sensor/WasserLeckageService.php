@@ -92,8 +92,11 @@ class WasserLeckageService implements SensorFetcherInterface
                 $resultVal = $this->getWasserLeckagedata($sensor);
                 $einheit=$resultVal['sensorEinheit'];  
                 $value=$resultVal['sensorValue'];  
-                
-                $this->logger->debugMe( "WasserLeckage Sensorservice SensorID  ".$sensor['sensorID']." SensorlokalId $SensorlokalId value $value Einheit $einheit type " . $resultVal['sensorValueType']);
+
+                $logValue = is_array($value) || is_object($value)
+                    ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : (string) $value;
+                $this->logger->debugMe( "WasserLeckage Sensorservice SensorID  ".$sensor['sensorID']." SensorlokalId $SensorlokalId value $logValue Einheit $einheit type " . $resultVal['sensorValueType']);
                 if ($value === null) {
                     $this->logger->Info('WasserLeckage Sensorservice keinen wert für sensorID: ' . $sensor['sensorID'] . ' sensorLokalId: ' . $sensor['sensorLokalId']);
                 } else {    

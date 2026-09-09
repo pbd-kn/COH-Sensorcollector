@@ -19,6 +19,14 @@ final class IQBoxSensorService implements SensorFetcherInterface
         '_photovoltaics_0_power' => 'pv.power',
         '_consumption_power' => 'house.power',
         '_powermeter_power' => 'grid.power',
+        '_powermeter_totalExport' => 'energy.grid.sellTotal',
+        '_powermeter_totalImport' => 'energy.grid.feedInTotal',
+        '_powermeter_realPower' => 'grid.power',
+        '_powermeter_real_power_1' => 'grid.l1.power',
+        '_powermeter_real_power_2' => 'grid.l2.power',
+        '_powermeter_real_power_3' => 'grid.l3.power',
+        '_metering_getProduction_P_active' => 'pv.power',
+        '_metering_getConsumption_P_active' => 'house.power',
     ];
 
     public function __construct(

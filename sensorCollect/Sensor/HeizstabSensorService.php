@@ -63,7 +63,7 @@ class HeizstabSensorService implements SensorFetcherInterface
                 $einheit = $sensor['sensorEinheit'];
                 $this->logger->debugMe('Heizstab Sensorservice SensorID ' . $sensor['sensorID'] . " lokalAccess $lokalAccess value $value Einheit $einheit");
 
-                if (!empty($sensor['transFormProcedur'])) {
+                if (!empty($sensor['transFormProcedur']) && $sensor['transFormProcedur'] !== '-') {
                     $this->logger->debugMe('Heizstab Sensorservice SensorID ' . $sensor['sensorID'] . ' transFormProcedur ' . $sensor['transFormProcedur']);
                     if (method_exists($this, $sensor['transFormProcedur'])) {
                         $arr = $this->{$sensor['transFormProcedur']}($value);

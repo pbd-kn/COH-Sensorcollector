@@ -81,7 +81,7 @@ $GLOBALS['TL_DCA']['tl_coh_sensorcollector_settings'] = [
             'sql' => "varchar(16) NOT NULL default 'local'",
         ],
         'tasmotaRaspberryBaseUrl' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'https://p1pu92iv4i9yh2m2.myfritz.net'"],
-        'tasmotaRaspberryToken' => ['inputType' => 'text', 'eval' => ['hideInput' => true, 'maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default 'COH_CODE'"],
+        'tasmotaRaspberryToken' => ['inputType' => 'text', 'eval' => ['hideInput' => true, 'maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default ''"],
         'tasmotaRaspberryPath' => ['inputType' => 'text', 'eval' => ['maxlength' => 255, 'tl_class' => 'w50'], 'sql' => "varchar(255) NOT NULL default '/api/coh/tasmota.php'"],
         'tasmotaRequestTimeout' => ['inputType' => 'text', 'eval' => ['rgxp' => 'natural', 'tl_class' => 'w50'], 'sql' => "smallint(5) unsigned NOT NULL default 15"],
         'raspberryApiCacheSeconds' => ['inputType' => 'text', 'eval' => ['rgxp' => 'natural', 'tl_class' => 'w50'], 'sql' => "int(10) unsigned NOT NULL default 15"],

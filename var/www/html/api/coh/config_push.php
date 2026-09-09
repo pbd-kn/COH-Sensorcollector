@@ -3,9 +3,11 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
-$API_TOKEN = 'COH_CODE';
+require_once __DIR__.'/api_env.php';
+
+$API_TOKEN = cohRequireApiToken();
 $DB = [ 'host' => '127.0.0.1', 'port' => 3306, 'user' => 'peter', 'pass' => 'sql666sql','db'   => 'co5_solar', ];
-$allowedTables = ['tl_coh_sensors','tl_coh_cfgcollect','tl_coh_geraete','tl_coh_sensorcollector_settings'];
+$allowedTables = ['tl_coh_sensors','tl_coh_cfgcollect','tl_coh_geraete'];
 
 // ---------------- AUTH ----------------
 $token = $_SERVER['HTTP_X_COH_TOKEN'] ?? ($_GET['token'] ?? '');
@@ -16,7 +18,7 @@ if (!hash_equals($API_TOKEN, $token)) {
 }
 
 // ---------------- CONFIG EXPORT ----------------
-// Liefert ausschliesslich Geraete- und Sensorkonfigurationen. Sensorwerte
+// Liefert ausschliesslich Geraete-, Sensor- und Collector-Konfigurationen. Sensorwerte
 // sind absichtlich nicht Bestandteil dieses Endpunkts.
 if ('GET' === ($_SERVER['REQUEST_METHOD'] ?? 'GET')) {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
@@ -39,6 +41,7 @@ if ('GET' === ($_SERVER['REQUEST_METHOD'] ?? 'GET')) {
             'ok' => true,
             'devices' => $fetchRows($db, 'tl_coh_geraete'),
             'sensors' => $fetchRows($db, 'tl_coh_sensors'),
+            'collectorConfig' => $fetchRows($db, 'tl_coh_cfgcollect'),
         ], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -48,38 +51,6 @@ if ('GET' === ($_SERVER['REQUEST_METHOD'] ?? 'GET')) {
     exit;
 }
 
-// ---------------- CONFIG EXPORT ----------------
-// Liefert ausschliesslich Geraete- und Sensorkonfigurationen. Sensorwerte
-// sind absichtlich nicht Bestandteil dieses Endpunkts.
-if ('GET' === ($_SERVER['REQUEST_METHOD'] ?? 'GET')) {
-    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
-    try {
-        $db = new mysqli($DB['host'], $DB['user'], $DB['pass'], $DB['db'], $DB['port']);
-        $db->set_charset('utf8mb4');
-
-        $fetchRows = static function (mysqli $db, string $tableName): array {
-            $rows = [];
-            $result = $db->query("SELECT * FROM `$tableName` ORDER BY id");
-            while ($row = $result->fetch_assoc()) {
-                $rows[] = $row;
-            }
-
-            return $rows;
-        };
-
-        echo json_encode([
-            'ok' => true,
-            'devices' => $fetchRows($db, 'tl_coh_geraete'),
-            'sensors' => $fetchRows($db, 'tl_coh_sensors'),
-        ], JSON_UNESCAPED_UNICODE);
-    } catch (Throwable $e) {
-        http_response_code(500);
-        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-    }
-
-    exit;
-}
 // ---------------- JSON ----------------
 $raw = file_get_contents('php://input');
 $data = json_decode($raw, true);
@@ -93,6 +64,7 @@ $rows  = $data['rows'] ?? [];
 $isConfigSnapshot = isset($data['devices'], $data['sensors'])
     && is_array($data['devices'])
     && is_array($data['sensors']);
+$hasCollectorConfig = isset($data['collectorConfig']) && is_array($data['collectorConfig']);
 
 if (!$isConfigSnapshot && !in_array($table, $allowedTables, true)) {
     http_response_code(400);
@@ -190,6 +162,9 @@ try {
             'sensorID',
             ['historycount', 'lastUpdated', 'pollInterval', 'lastValue', 'lastError']
         );
+        $collectorConfigResult = $hasCollectorConfig
+            ? $syncTable($db, 'tl_coh_cfgcollect', $data['collectorConfig'], 'cfgID')
+            : ['received' => 0, 'inserted' => 0, 'updated' => 0];
 
         $db->commit();
 
@@ -197,6 +172,7 @@ try {
             'ok' => true,
             'devices' => $deviceResult,
             'sensors' => $sensorResult,
+            'collectorConfig' => $collectorConfigResult,
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }

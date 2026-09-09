@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__.'/api_env.php';
+
 function iqboxRespond(int $status, array $payload): never
 {
     http_response_code($status);
@@ -21,9 +23,7 @@ function iqboxPrivateHost(string $host): bool
         && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
 }
 
-const COH_API_TOKEN = 'COH_CODE';
-
-$configuredToken = COH_API_TOKEN;
+$configuredToken = cohRequireApiToken();
 $requestToken = (string) ($_SERVER['HTTP_X_COH_TOKEN'] ?? ($_GET['token'] ?? ''));
 if (!hash_equals($configuredToken, $requestToken)) {
     iqboxRespond(401, ['ok' => false, 'error' => 'unauthorized']);

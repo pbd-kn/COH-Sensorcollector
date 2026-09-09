@@ -6,6 +6,8 @@ declare(strict_types=1);
 // ------------------------------------
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__.'/api_env.php';
+
 // gzip Kompression (massiver Speed Boost bei vielen Daten)
 if (isset($_SERVER['HTTP_ACCEPT_ENCODING']) && strpos($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip') !== false) {
     ob_start('ob_gzhandler');
@@ -14,7 +16,7 @@ if (isset($_SERVER['HTTP_ACCEPT_ENCODING']) && strpos($_SERVER['HTTP_ACCEPT_ENCO
 // ------------------------------------
 // CONFIG
 // ------------------------------------
-$API_TOKEN = 'COH_CODE';
+$API_TOKEN = cohRequireApiToken();
 
 $DB = [
   'host' => '127.0.0.1',

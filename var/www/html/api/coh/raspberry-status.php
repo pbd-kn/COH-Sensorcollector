@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
-const COH_API_TOKEN = 'COH_CODE';
+require_once __DIR__.'/api_env.php';
+$configuredToken = cohRequireApiToken();
 const HEATING_PARAMETERS_FILE = '/home/peter/scripts/coh/execScripts/task_heizstab_params.json';
 const HEATING_LOG_FILE = '/home/peter/coh/logs/heizstabserver.log';
 const BACKUP_LOG_FILE = '/media/peter/USBBACKUP/backup.log';
@@ -26,7 +27,7 @@ function formatBytes(int|float $bytes): string
 }
 
 $token = $_SERVER['HTTP_X_COH_TOKEN'] ?? ($_GET['token'] ?? '');
-if (!hash_equals(COH_API_TOKEN, (string) $token)) {
+if (!hash_equals($configuredToken, (string) $token)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'unauthorized']);
     exit;
