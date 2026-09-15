@@ -61,9 +61,13 @@ final class IQBoxSensorService implements SensorFetcherInterface
             try {
                 // Der Collector laeuft im selben LAN und liest immer direkt per Modbus TCP.
                 $snapshot ??= $this->modbus($settings)->readSnapshot();
+                $unit = trim((string) ($sensor['sensorEinheit'] ?? ''));
+                if ($unit === '' || $unit === '-') {
+                    $unit = $this->inferredUnit($selection);
+                }
                 $result[$sensorId] = [
                     'sensorID' => $sensorId,
-                    'sensorEinheit' => (string) ($sensor['sensorEinheit'] ?? ''),
+                    'sensorEinheit' => $unit,
                     'sensorValueType' => (string) ($sensor['sensorValueType'] ?? ''),
                     'sensorSource' => (string) ($sensor['sensorSource'] ?? ''),
                     'sensorValue' => $this->snapshotValue($snapshot, $selection),
@@ -74,6 +78,26 @@ final class IQBoxSensorService implements SensorFetcherInterface
         }
 
         return $result;
+    }
+
+    private function inferredUnit(string $selection): string
+    {
+        $normalized = strtolower(trim($selection));
+
+        if (preg_match('/^(today|lifetime)\.work\.(generation|consumption|batteryfeed|batterydraw|gridfeed|griddraw)$/', $normalized)) {
+            return 'Wh';
+        }
+        if (str_starts_with($normalized, 'today.saving.energy.')) {
+            return 'Wh';
+        }
+        if (str_ends_with($normalized, 'power') || str_contains($normalized, '.power.')) {
+            return 'W';
+        }
+        if ($normalized === 'live.batterysoc' || str_contains($normalized, 'selfsufficiency.value') || str_contains($normalized, 'selfconsumption.value')) {
+            return '%';
+        }
+
+        return '';
     }
 
     private function qualifiedErrorMessage(string $selection, \Throwable $error): string

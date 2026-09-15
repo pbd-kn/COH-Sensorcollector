@@ -26,7 +26,7 @@ $DB = [
   'db'   => 'co5_solar',
 ];
 
-// dynamisches Limit
+// Harte Obergrenze fuer nicht verdichtete Alt-Clients.
 $MAX_ROWS  = isset($_GET['bulk']) ? 100000 : 20000;
 $MAX_AGE_S = 60 * 60 * 24 * 30; // 30 Tage
 
@@ -48,6 +48,8 @@ $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
 $latest = !empty($_GET['latest']);
 $from = isset($_GET['from']) ? (int) $_GET['from'] : null;
 $to = isset($_GET['to']) ? (int) $_GET['to'] : null;
+$maxPoints = isset($_GET['maxPoints']) ? (int) $_GET['maxPoints'] : 0;
+$maxPoints = max(0, min(500, $maxPoints));
 $hasRange = $from !== null || $to !== null;
 $requestedSensorIds = [];
 foreach (explode(',', (string)($_GET['sensorIDs'] ?? '')) as $requestedSensorId) {
@@ -99,6 +101,25 @@ if ($requestedSensorIds !== []) {
     $sensorFilter = 's.sensorID IN (' . implode(',', $quotedSensorIds) . ')';
 }
 
+// Nur dann verdichten, wenn wenigstens ein angefragter Sensor tatsaechlich
+// mehr als maxPoints Rohwerte besitzt. Kleine Datenmengen bleiben unveraendert.
+$shouldAggregate = false;
+if ($hasRange && $maxPoints > 0) {
+    $countSql = "SELECT v.sensor
+                   FROM tl_coh_sensorvalue v
+                   JOIN tl_coh_sensors s ON s.id = v.sensor
+                  WHERE v.tstamp >= ? AND v.tstamp < ?"
+        . ($sensorFilter !== '' ? " AND $sensorFilter" : '') . "
+                  GROUP BY v.sensor
+                 HAVING COUNT(*) > ?
+                  LIMIT 1";
+    $countStmt = $db->prepare($countSql);
+    $countStmt->bind_param('iii', $from, $to, $maxPoints);
+    $countStmt->execute();
+    $shouldAggregate = $countStmt->get_result()->num_rows > 0;
+    $countStmt->close();
+}
+
 // ------------------------------------
 // QUERY (OPTIMIERT!)
 // ------------------------------------
@@ -120,6 +141,35 @@ if ($latest) {
             " . ($sensorFilter !== '' ? "WHERE $sensorFilter" : '') . "
             ORDER BY s.sensorID";
     $stmt = $db->prepare($sql);
+} elseif ($hasRange && $maxPoints > 0 && $shouldAggregate) {
+    // Pro Sensor und Zeitfenster nur einen gemittelten Messpunkt liefern. Dadurch
+    // werden grosse Zeitraeume bereits in der Datenbank auf etwa maxPoints
+    // reduziert und nicht erst zum aufrufenden Webserver uebertragen.
+    $bucketSeconds = max(1, (int) ceil(($to - $from) / $maxPoints));
+    $sql = "SELECT MIN(v.tstamp) AS tstamp, s.sensorID, s.sensorTitle, s.sensorLokalId,
+                   s.outputMode,
+                   ROUND(AVG(CASE
+                       WHEN v.sensorValue REGEXP '^-?[0-9]+([.][0-9]+)?$'
+                       THEN CAST(v.sensorValue AS DECIMAL(20,6))
+                       ELSE NULL
+                   END), 6) AS sensorValue,
+                   e.text AS sensorEinheit, t.text AS sensorValueType, s.sensorSource
+              FROM tl_coh_sensorvalue v
+              JOIN tl_coh_sensors s ON s.id = v.sensor
+              JOIN tl_coh_sensoreinheiten e ON e.id = v.einheit
+              JOIN tl_coh_sensortypen t ON t.id = v.sensorType
+             WHERE v.tstamp >= ? AND v.tstamp < ?" . ($sensorFilter !== '' ? " AND $sensorFilter" : '') . "
+             GROUP BY v.sensor, FLOOR((v.tstamp - ?) / ?),
+                      s.sensorID, s.sensorTitle, s.sensorLokalId, s.outputMode,
+                      e.text, t.text, s.sensorSource
+            HAVING AVG(CASE
+                       WHEN v.sensorValue REGEXP '^-?[0-9]+([.][0-9]+)?$'
+                       THEN CAST(v.sensorValue AS DECIMAL(20,6))
+                       ELSE NULL
+                   END) IS NOT NULL
+             ORDER BY tstamp ASC";
+    $stmt = $db->prepare($sql);
+    $stmt->bind_param('iiii', $from, $to, $from, $bucketSeconds);
 } elseif ($hasRange) {
     $sql = $select . "
             WHERE v.tstamp >= ? AND v.tstamp < ?" . ($sensorFilter !== '' ? " AND $sensorFilter" : '') . "

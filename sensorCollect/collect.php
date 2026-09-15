@@ -70,17 +70,17 @@ function getHistoryFlag(mysql_dialog  $db, string $sensorID): int
 
 function getSensorReference(mysql_dialog $db, string $sensorID): array
 {
-    $stmt = $db->prepare('SELECT id, history FROM tl_coh_sensors WHERE sensorID = ? LIMIT 1');
+    $stmt = $db->prepare('SELECT id, isHistory, history FROM tl_coh_sensors WHERE sensorID = ? LIMIT 1');
     if (!$stmt) throw new \RuntimeException('prepare(sensor reference) failed');
     $stmt->bind_param('s', $sensorID);
     $stmt->execute();
-    $stmt->bind_result($id, $history);
+    $stmt->bind_result($id, $isHistory, $history);
     if (!$stmt->fetch()) {
         $stmt->close();
         throw new \RuntimeException("Unbekannter Sensor '$sensorID'");
     }
     $stmt->close();
-    return ['id' => (int) $id, 'history' => (int) $history];
+    return ['id' => (int) $id, 'isHistory' => (string) $isHistory === '1', 'history' => (int) $history];
 }
 
 function getLookupReference(mysql_dialog $db, string $table, string $text): int
@@ -106,6 +106,71 @@ function isJsonSensorValue(string $value): bool
     if ($value === '' || !in_array($value[0], ['{', '['], true)) return false;
     json_decode($value, true);
     return json_last_error() === JSON_ERROR_NONE;
+}
+
+/**
+ * Erzeugt fuer semantisch identisches JSON immer dieselbe Schreibweise.
+ * Die Reihenfolge von Objekt-Schluesseln ist dabei unerheblich; die Reihenfolge
+ * numerischer Listen bleibt erhalten.
+ */
+function normalizeJsonSensorValue(string $value): ?string
+{
+    $decoded = json_decode($value, true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return null;
+    }
+
+    $sortObjectKeys = static function (mixed $item) use (&$sortObjectKeys): mixed {
+        if (!is_array($item)) {
+            return $item;
+        }
+
+        foreach ($item as $key => $child) {
+            $item[$key] = $sortObjectKeys($child);
+        }
+        if (!array_is_list($item)) {
+            ksort($item, SORT_STRING);
+        }
+
+        return $item;
+    };
+
+    return json_encode(
+        $sortObjectKeys($decoded),
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION
+    ) ?: null;
+}
+
+/**
+ * Speichert Leistungs- und Energiewerte in einheitlichen Basiseinheiten.
+ * Rueckgabe: [umgerechneter Wert, Einheit].
+ */
+function normalizePowerEnergyUnit(string $value, string $unit): array
+{
+    $normalizedUnit = strtolower(trim($unit));
+    if (!is_numeric(trim($value))) {
+        return [$value, $unit];
+    }
+
+    $divisor = match ($normalizedUnit) {
+        'ws' => 3600000.0,
+        'wh', 'w' => 1000.0,
+        default => null,
+    };
+    if ($divisor === null) {
+        return [$value, $unit];
+    }
+
+    $converted = (float) $value / $divisor;
+    $convertedValue = rtrim(rtrim(sprintf('%.9F', $converted), '0'), '.');
+    if ($convertedValue === '' || $convertedValue === '-0') {
+        $convertedValue = '0';
+    }
+
+    return [
+        $convertedValue,
+        in_array($normalizedUnit, ['ws', 'wh'], true) ? 'kWh' : 'kW',
+    ];
 }
 
 /**
@@ -238,12 +303,23 @@ function upsertCurrentValue( mysql_dialog $db, string $sensorID, int $tstamp, st
  * Historie-Fall: wenn der letzte Wert gleich ist -> nur tstamp aktualisieren,
  * sonst neuen Datensatz anlegen.
  */
-function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string $sensorValue, int $einheit, int $sensorType, Logger $logger): void {
+function insertOrTouchHistory(
+    mysql_dialog $db,
+    int $sensor,
+    int $tstamp,
+    string $sensorValue,
+    int $einheit,
+    int $sensorType,
+    Logger $logger,
+    bool $alwaysUpdate = false,
+    int $checkpointSeconds = 0
+): void {
     $db->begin_transaction();
 
     try {
         // Letzten Eintrag holen & sperren
         $sqlLast = "SELECT id,
+                           tstamp,
                            TRIM(sensorValue)       AS v,
                            einheit,
                            sensorType
@@ -262,7 +338,7 @@ function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string
 
         $stmt->bind_param('i', $sensor);
         $stmt->execute();
-        $stmt->bind_result($lastId, $lastVal, $lastEinheit, $lastType);
+        $stmt->bind_result($lastId, $lastTstamp, $lastVal, $lastEinheit, $lastType);
         $hasLast = $stmt->fetch();
         $stmt->close();
 
@@ -282,9 +358,12 @@ function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string
             (int)$lastEinheit === $einheit &&
             (int)$lastType === $sensorType;
 
-        if ($isSame) {
-            // nur Touch
-            $upd = "UPDATE tl_coh_sensorvalue SET tstamp = ? WHERE id = ?";
+        if ($alwaysUpdate && $hasLast) {
+            // JSON-Sammelsensoren sind aktuelle Snapshots: auch bei geaendertem
+            // Inhalt die bestehende Zeile aktualisieren, statt Historie anzulegen.
+            $upd = "UPDATE tl_coh_sensorvalue
+                       SET tstamp = ?, sensorValue = ?, einheit = ?, sensorType = ?
+                     WHERE id = ?";
             $stmtU = $db->prepare($upd);
             if (!$stmtU) {
                 $logger->Error("prepare(update touch) failed: " . $db->error);
@@ -292,7 +371,7 @@ function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string
                 return;
             }
 
-            $stmtU->bind_param('ii', $tstamp, $lastId);
+            $stmtU->bind_param('isiii', $tstamp, $sensorValue, $einheit, $sensorType, $lastId);
 
             if (!$stmtU->execute()) {
                 $logger->Error("exec(update touch) failed: " . $stmtU->error);
@@ -303,7 +382,7 @@ function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string
             $stmtU->close();
             //$logger->debugMe("Touch history: id=$lastId, sensorID=$sensorID, tstamp=$tstamp");
             $logger->debugMe("Touch insert: id=$lastId, sensor=$sensor, tstamp=$tstamp");
-        } else {
+        } elseif (!$isSame || ($checkpointSeconds > 0 && $tstamp - (int) $lastTstamp >= $checkpointSeconds)) {
             // INSERT (auch wenn nur Einheit geändert wurde!)
             $ins = "INSERT INTO tl_coh_sensorvalue
                        (tstamp, sensor, sensorValue, einheit, sensorType)
@@ -331,6 +410,10 @@ function insertOrTouchHistory(mysql_dialog $db, int $sensor, int $tstamp, string
                 "Insert history: sensor=$sensor, tstamp=$tstamp, value=[" .
                 var_export($sensorValue, true) . "], einheit=$einheit"
             );
+        } else {
+            // Gleicher History-Wert innerhalb des Kontrollintervalls: weder
+            // neuen Datensatz anlegen noch den Zeitpunkt des Messpunkts ändern.
+            $logger->debugMe("Skip unchanged history: sensor=$sensor, lastTstamp=$lastTstamp");
         }
 
         $db->commit();
@@ -369,6 +452,7 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
         // History-Flag holen (kein JOIN mit tl_coh_sensorvalue!)
         try {
             $sensorReference = getSensorReference($db, $sensorID);
+            $isHistoryActive = $sensorReference['isHistory'];
             $history = $sensorReference['history'];
         } catch (\Throwable $e) {
             $logger->Error("history lookup failed for sensorID='$sensorID': " . $e->getMessage());
@@ -379,21 +463,38 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
         $logger->debugMe(sprintf( 'SID raw="%s" len=%d hex=%s', $sensorID, strlen($sensorID), bin2hex($sensorID)));
 
         try {
-            if (isJsonSensorValue($sensorValue)) {
+            $isJson = isJsonSensorValue($sensorValue);
+            if ($isJson) {
+                $sensorValue = normalizeJsonSensorValue($sensorValue) ?? $sensorValue;
                 $sensorEinheit = 'json';
+                $sensorValueType = 'json';
+            } else {
+                [$sensorValue, $sensorEinheit] = normalizePowerEnergyUnit($sensorValue, $sensorEinheit);
             }
             $einheitReference = getLookupReference($db, 'tl_coh_sensoreinheiten', trim($sensorEinheit));
             $typeReference = getLookupReference($db, 'tl_coh_sensortypen', trim($sensorValueType));
-            if ($history === 0) {
-                // genau eine aktuelle Zeile pflegen
-                //upsertCurrentValue($db, $sensorID, $tstamp, $sensorValue, $sensorEinheit, $sensorValueType, $sensorSource, $logger);
-                // geändert 28.04.2026 auch aktuelle werte werdn wenn sie identisch sind nur das datum geändert
-                // aufsummierungen über parameter ausgbe im sensor
-                insertOrTouchHistory($db, $sensorReference['id'], $tstamp, $sensorValue, $einheitReference, $typeReference, $logger);
-            } else {
-                // Historie sammeln (aber bei identischem letzten Wert nur tstamp updaten)
-                insertOrTouchHistory($db, $sensorReference['id'], $tstamp, $sensorValue, $einheitReference, $typeReference, $logger);
-            }
+            // Ohne History sowie bei JSON-Sammelsensoren wird genau eine aktuelle
+            // Zeile gepflegt. History-Sensoren speichern jede Aenderung; je nach
+            // Auswahl kommt bei konstantem Wert ein Kontrollpunkt hinzu.
+            $alwaysUpdate = $isJson || !$isHistoryActive;
+            $checkpointSeconds = $isHistoryActive ? match ($history) {
+                2 => 3600,
+                3 => 86400,
+                4 => 604800,
+                5 => 2592000,
+                default => 0,
+            } : 0;
+            insertOrTouchHistory(
+                $db,
+                $sensorReference['id'],
+                $tstamp,
+                $sensorValue,
+                $einheitReference,
+                $typeReference,
+                $logger,
+                $alwaysUpdate,
+                $checkpointSeconds
+            );
         } catch (\Throwable $e) {
             // Fehler pro Sensor protokollieren, weiter mit dem nächsten
             $logger->Error("processing failed for sensorID='$sensorID': " . $e->getMessage());
@@ -723,7 +824,7 @@ $logger->Info("Restart: " . date('d.m.Y H:i:s'));
 function collectorQuietPeriodWakeUp(\DateTimeImmutable $now): ?\DateTimeImmutable
 {
     $hour = (int) $now->format('G');
-    if ($hour >= 19) {
+    if ($hour >= 20) {
         return $now->modify('tomorrow')->setTime(6, 0);
     }
     if ($hour < 6) {
@@ -736,13 +837,23 @@ function collectorQuietPeriodWakeUp(\DateTimeImmutable $now): ?\DateTimeImmutabl
 while (true) {
     $iteration++;
 
-    // Zwischen 19:00 Uhr und 06:00 Uhr weder Sensoren lesen noch Werte speichern.
+    // Zwischen 20:00 Uhr und 06:00 Uhr weder Sensoren lesen noch Werte speichern.
     $now = new \DateTimeImmutable('now');
     $wakeUp = collectorQuietPeriodWakeUp($now);
     if ($wakeUp !== null) {
         $sleepSeconds = max(1, $wakeUp->getTimestamp() - $now->getTimestamp());
         $logger->Info('Ruhezeit aktiv: keine Sensorabfrage bis '.$wakeUp->format('d.m.Y H:i:s').'.');
         sleep($sleepSeconds);
+
+        // MariaDB beendet eine über viele Stunden unbenutzte Verbindung. Da alle
+        // Fetcher dasselbe mysql_dialog-Objekt verwenden, genügt es, dessen
+        // interne Verbindung nach der Ruhezeit zu ersetzen.
+        if (!$db->connect('localhost', 'peter', 'sql666sql', 'co5_solar')) {
+            $logger->Error('DB reconnect nach Ruhezeit fehlgeschlagen: '.$db->errors);
+            sleep(60);
+        } else {
+            $logger->Info('DB reconnect nach Ruhezeit erfolgreich.');
+        }
         continue;
     }
 
