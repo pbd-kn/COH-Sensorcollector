@@ -3,3 +3,5 @@
 /contao/config/task_heizstab_params.local.json
 /.env.local
 /.env.*.local
+/execScripts/km271-raw.log
+/execScripts/km271-snapshot-*.json

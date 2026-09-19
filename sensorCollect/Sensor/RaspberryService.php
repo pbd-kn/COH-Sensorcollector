@@ -138,7 +138,7 @@ class RaspberryService implements SensorFetcherInterface
 
     private function getStatusSnapshot(): ?array
     {
-        $token = trim((string) getenv('COH_API_TOKEN'));
+        $token = $this->getApiToken();
         if ($token === '') {
             $this->logger->Error('Raspberry: COH_API_TOKEN ist nicht konfiguriert.');
             return null;
@@ -151,6 +151,33 @@ class RaspberryService implements SensorFetcherInterface
         }
 
         return $payload;
+    }
+
+    /**
+     * Liest den API-Token aus der Dienstumgebung. Bei einem manuellen Aufruf
+     * von collect.php steht die systemd-Umgebung nicht zur Verfuegung; dann
+     * wird dieselbe lokale, nicht versionierte Datei wie in der Status-API
+     * verwendet. Der Token wird niemals protokolliert.
+     */
+    private function getApiToken(): string
+    {
+        $token = getenv('COH_API_TOKEN');
+        if (is_string($token) && trim($token) !== '') {
+            return trim($token);
+        }
+
+        foreach (['/home/peter/scripts/coh/.env.local', dirname(__DIR__, 2) . '/.env.local'] as $file) {
+            if (!is_readable($file)) {
+                continue;
+            }
+            $values = parse_ini_file($file, false, INI_SCANNER_RAW);
+            $token = is_array($values) ? ($values['COH_API_TOKEN'] ?? '') : '';
+            if (is_string($token) && trim($token) !== '') {
+                return trim($token, " \t\n\r\0\x0B\"'");
+            }
+        }
+
+        return '';
     }
 
     private function isStatusPath(string $path): bool

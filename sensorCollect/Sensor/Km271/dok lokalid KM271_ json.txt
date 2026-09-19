@@ -1,0 +1,439 @@
+KM271> json
+{
+    "Gerät": "Buderus KM271",
+    "Betriebsart": "nur lesend",
+    "Erstellt am": "2026-09-18T17:38:08+02:00",
+    "KM271": {
+        "HK1_Sommergrenze": {
+            "Name": "HK1 Sommergrenze",
+            "Wert": 14,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Nachttemperatur": {
+            "Name": "HK1 Nachttemperatur",
+            "Wert": 15,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Tagtemperatur": {
+            "Name": "HK1 Tagtemperatur",
+            "Wert": 20,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Betriebsart": {
+            "Name": "HK1 Betriebsart",
+            "Wert": "Automatik",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Urlaubstemperatur": {
+            "Name": "HK1 Urlaubstemperatur",
+            "Wert": 17,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Maximaltemperatur": {
+            "Name": "HK1 Maximaltemperatur",
+            "Wert": 90,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Auslegungstemperatur": {
+            "Name": "HK1 Auslegungstemperatur",
+            "Wert": 75,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:31+02:00"
+        },
+        "HK1_Temperatur_Offset": {
+            "Name": "HK1 Temperatur-Offset",
+            "Wert": 0,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:32+02:00"
+        },
+        "HK1_Fernbedienung": {
+            "Name": "HK1 Fernbedienung",
+            "Wert": "aus",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:32+02:00"
+        },
+        "Frostschutz_ab": {
+            "Name": "Frostschutz ab",
+            "Wert": 5,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:32+02:00"
+        },
+        "Warmwasser_eingestellte_Temperatur": {
+            "Name": "Warmwasser eingestellte Temperatur",
+            "Wert": 48,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:35+02:00"
+        },
+        "Warmwasser_Betriebsart": {
+            "Name": "Warmwasser Betriebsart",
+            "Wert": "Automatik",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:35+02:00"
+        },
+        "Warmwasserbereitung": {
+            "Name": "Warmwasserbereitung",
+            "Wert": "ein",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:35+02:00"
+        },
+        "Warmwasser_Zirkulation_Einstellung": {
+            "Name": "Warmwasser Zirkulation Einstellung",
+            "Wert": "4 ×/h",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:35+02:00"
+        },
+        "Brennerart": {
+            "Name": "Brennerart",
+            "Wert": "1-stufig",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:36+02:00"
+        },
+        "Maximale_Kesseltemperatur": {
+            "Name": "Maximale Kesseltemperatur",
+            "Wert": 80,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:36+02:00"
+        },
+        "Pumpenlogik_Temperatur": {
+            "Name": "Pumpenlogik Temperatur",
+            "Wert": 40,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:36+02:00"
+        },
+        "HK1_Heizprogramm": {
+            "Name": "HK1 Heizprogramm",
+            "Wert": "Familie",
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:37+02:00"
+        },
+        "HK1_Ferientage": {
+            "Name": "HK1 Ferientage",
+            "Wert": 0,
+            "Einheit": "Tage",
+            "Datum": "2026-09-18T17:37:37+02:00"
+        },
+        "HK1_Vorlauf_Solltemperatur": {
+            "Name": "HK1 Vorlauf Solltemperatur",
+            "Wert": 0,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:46+02:00"
+        },
+        "HK1_Vorlauf_Isttemperatur": {
+            "Name": "HK1 Vorlauf Isttemperatur",
+            "Wert": 39,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:46+02:00"
+        },
+        "HK1_Raum_Solltemperatur": {
+            "Name": "HK1 Raum Solltemperatur",
+            "Wert": 0,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:46+02:00"
+        },
+        "HK1_Raum_Isttemperatur": {
+            "Name": "HK1 Raum Isttemperatur",
+            "Wert": 0,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:47+02:00"
+        },
+        "HK1_Einschaltoptimierung": {
+            "Name": "HK1 Einschaltoptimierung",
+            "Wert": 0,
+            "Einheit": "min",
+            "Datum": "2026-09-18T17:37:47+02:00"
+        },
+        "HK1_Ausschaltoptimierung": {
+            "Name": "HK1 Ausschaltoptimierung",
+            "Wert": 0,
+            "Einheit": "min",
+            "Datum": "2026-09-18T17:37:47+02:00"
+        },
+        "HK1_Pumpenleistung": {
+            "Name": "HK1 Pumpenleistung",
+            "Wert": 0,
+            "Einheit": "%",
+            "Datum": "2026-09-18T17:37:47+02:00"
+        },
+        "HK1_Mischerstellung": {
+            "Name": "HK1 Mischerstellung",
+            "Wert": 0,
+            "Einheit": "%",
+            "Datum": "2026-09-18T17:37:48+02:00"
+        },
+        "HK2_Vorlauf_Solltemperatur": {
+            "Name": "HK2 Vorlauf Solltemperatur",
+            "Wert": 5,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:50+02:00"
+        },
+        "HK2_Vorlauf_Isttemperatur": {
+            "Name": "HK2 Vorlauf Isttemperatur",
+            "Wert": 28,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:51+02:00"
+        },
+        "HK2_Raum_Solltemperatur": {
+            "Name": "HK2 Raum Solltemperatur",
+            "Wert": 0,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:51+02:00"
+        },
+        "HK2_Raum_Isttemperatur": {
+            "Name": "HK2 Raum Isttemperatur",
+            "Wert": 55,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:51+02:00"
+        },
+        "HK2_Pumpenleistung": {
+            "Name": "HK2 Pumpenleistung",
+            "Wert": 0,
+            "Einheit": "%",
+            "Datum": "2026-09-18T17:37:52+02:00"
+        },
+        "HK2_Mischerstellung": {
+            "Name": "HK2 Mischerstellung",
+            "Wert": -100,
+            "Einheit": "%",
+            "Datum": "2026-09-18T17:37:52+02:00"
+        },
+        "Warmwasser_Solltemperatur": {
+            "Name": "Warmwasser Solltemperatur",
+            "Wert": 48,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:55+02:00"
+        },
+        "Warmwasser_Isttemperatur": {
+            "Name": "Warmwasser Isttemperatur",
+            "Wert": 54,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:55+02:00"
+        },
+        "Warmwasser_Einschaltoptimierung": {
+            "Name": "Warmwasser Einschaltoptimierung",
+            "Wert": 0,
+            "Einheit": "min",
+            "Datum": "2026-09-18T17:37:55+02:00"
+        },
+        "Warmwasser_Ladepumpe": {
+            "Name": "Warmwasser Ladepumpe",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:56+02:00"
+        },
+        "Warmwasser_Zirkulationspumpe": {
+            "Name": "Warmwasser Zirkulationspumpe",
+            "Wert": 1,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:56+02:00"
+        },
+        "Warmwasser_Solarpumpe": {
+            "Name": "Warmwasser Solarpumpe",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:56+02:00"
+        },
+        "Kessel_Solltemperatur": {
+            "Name": "Kessel Solltemperatur",
+            "Wert": 12,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:56+02:00"
+        },
+        "Kessel_Isttemperatur": {
+            "Name": "Kessel Isttemperatur",
+            "Wert": 39,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:56+02:00"
+        },
+        "Brenner_Einschalttemperatur": {
+            "Name": "Brenner Einschalttemperatur",
+            "Wert": 5,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:56+02:00"
+        },
+        "Brenner_Ausschalttemperatur": {
+            "Name": "Brenner Ausschalttemperatur",
+            "Wert": 19,
+            "Einheit": "°C",
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Brenner": {
+            "Name": "Störung Brenner",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Kesselfühler": {
+            "Name": "Störung Kesselfühler",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Zusatzfühler": {
+            "Name": "Störung Zusatzfühler",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Kessel_bleibt_kalt": {
+            "Name": "Störung Kessel bleibt kalt",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Abgasfühler": {
+            "Name": "Störung Abgasfühler",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Abgasgrenze": {
+            "Name": "Störung Abgasgrenze",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Störung_Sicherheitskette": {
+            "Name": "Störung Sicherheitskette",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Externe_Störung": {
+            "Name": "Externe Störung",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:57+02:00"
+        },
+        "Abgastest": {
+            "Name": "Abgastest",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Brenner_Stufe_1": {
+            "Name": "Brenner Stufe 1",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Kesselschutz": {
+            "Name": "Kesselschutz",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Kessel_aktiv": {
+            "Name": "Kessel aktiv",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Brennerfreigabe": {
+            "Name": "Brennerfreigabe",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Brennerfreigabe_hohe_Leistung": {
+            "Name": "Brennerfreigabe hohe Leistung",
+            "Wert": 1,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Brenner_Stufe_2": {
+            "Name": "Brenner Stufe 2",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Brenner_Ansteuerung": {
+            "Name": "Brenner-Ansteuerung",
+            "Wert": 0,
+            "Einheit": null,
+            "Datum": "2026-09-18T17:37:58+02:00"
+        },
+        "Brennerlaufzeit_Minuten": {
+            "Name": "Brennerlaufzeit",
+            "Wert": 1532419,
+            "Einheit": "min",
+            "Datum": "2026-09-18T17:37:59+02:00"
+        },
+        "Brennerlaufzeit_Stunden": {
+            "Name": "Brennerlaufzeit",
+            "Wert": 25540.3,
+            "Einheit": "h",
+            "Datum": "2026-09-18T17:37:59+02:00"
+        }
+    }
+    
+    
+    potentiell zum schreiben
+    - HK1_Betriebsart – Nacht, Tag oder Automatik
+- HK1_Tagtemperatur
+- HK1_Nachttemperatur
+- HK1_Urlaubstemperatur
+- HK1_Sommergrenze – Sommer, 10–30 °C oder Winter
+- HK1_Frostschutz_ab
+- HK1_Auslegungstemperatur
+- HK1_Aufschalttemperatur
+- HK1_Aussenhalt_ab
+- HK1_Absenkungsart
+- HK1_Heizprogramm
+- HK1_Ferientage
+Für Warmwasser:
+- Warmwasser_Betriebsart
+- Warmwasser_eingestellte_Temperatur
+- Warmwasser_Zirkulation_Einstellung
+Weitere potenzielle Schreibbefehle:
+- entsprechende Werte für HK2
+- Datum und Uhrzeit der Regelung
+
+Schreibbefehle 
+PS C:\wampneu\www\co5\co5Bundles\COH-Sensorcollector> php execScripts\km271-write-preview.php HK1_Sommergrenze 14  für sommergrenze
+{
+    "LokaleId": "HK1_Sommergrenze",
+    "Wert": 14,
+    "Einheit": "°C",
+    "Nutzdaten": [
+        7,
+        0,
+        101,
+        14,
+        101,
+        101,
+        101,
+        101
+    ],
+    "Hex": "07 00 65 0E 65 65 65 65",
+    "Sendebereit": false
+}
+
+NICHT GESENDET: Dies ist nur die validierte Codierungsvorschau.
+PS C:\wampneu\www\co5\co5Bundles\COH-Sensorcollector> php execScripts\km271-write-preview.php   alee möglichen befehle
+KM271-Schreibvorschau (sendet nichts an die Heizung)
+
+Aufruf:
+  php km271-write-preview.php LOKALE_ID WERT
+
+Moegliche Schreibauftraege:
+  HK1_Betriebsart                            HK1 Betriebsart
+  HK1_Tagtemperatur                          HK1 Tagtemperatur
+  HK1_Nachttemperatur                        HK1 Nachttemperatur
+  HK1_Urlaubstemperatur                      HK1 Urlaubstemperatur
+  HK1_Sommergrenze                           HK1 Sommergrenze
+  HK1_Frostschutz_ab                         HK1 Frostschutz ab
+  HK1_Auslegungstemperatur                   HK1 Auslegungstemperatur
+  HK1_Aufschalttemperatur                    HK1 Aufschalttemperatur
+  HK1_Aussenhalt_ab                          HK1 Außenhalt ab
+  HK1_Absenkungsart                          HK1 Absenkungsart
+  HK1_Heizprogramm                           HK1 Heizprogramm
+  HK1_Ferientage                             HK1 Ferientage
+  Warmwasser_Betriebsart                     Warmwasser Betriebsart
+  Warmwasser_eingestellte_Temperatur         Warmwasser eingestellte Temperatur
+  Warmwasser_Zirkulation_Einstellung         Warmwasser Zirkulation Einstellung
