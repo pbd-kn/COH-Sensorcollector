@@ -122,7 +122,34 @@ while (true) {
         continue;
     }
 
-    echo "Unbekannter Befehl. 'help' zeigt alle Befehle.\n";
+    // Einzelwerte direkt ueber ihren JSON-Namen abrufen.
+    $requestedKey = valueCommand($input);
+    $requestedKey = $requestedKey === 'brennerlaufzeit' ? 'brennerlaufzeit-stunden' : $requestedKey;
+    $found = false;
+    foreach (buildValuesDocument()['KM271'] as $key => $entry) {
+        if (valueCommand($key) === $requestedKey) {
+            $unit = $entry['Einheit'] !== null && $entry['Einheit'] !== '' ? ' ' . $entry['Einheit'] : '';
+            echo $entry['Wert'] . $unit . PHP_EOL;
+            $found = true;
+            break;
+        }
+    }
+    if ($found) {
+        continue;
+    }
+    $matches = array_filter($decoder->values(), static fn (array $entry): bool =>
+        str_starts_with(valueCommand(germanJsonKey($entry['label'], $entry['unit'])), $requestedKey)
+    );
+    if ($matches !== []) {
+        printValues($matches);
+        continue;
+    }
+    if ($requestedKey === 'brennerlaufzeit-stunden') {
+        echo "Brennerlaufzeit noch nicht empfangen. Mit 'r 20' weiter lesen.\n";
+        continue;
+    }
+
+    echo "Unbekannter Befehl oder noch nicht empfangener Wert. 'help' zeigt alle Befehle.\n";
 }
 
 function collectTelegrams(float $seconds): void
@@ -285,6 +312,12 @@ function germanJsonKey(string $label, string $unit): string
     return $key !== '' ? $key : 'Unbekannter_Wert';
 }
 
+function valueCommand(string $key): string
+{
+    $key = strtr($key, ['Ä' => 'ae', 'Ö' => 'oe', 'Ü' => 'ue', 'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss']);
+    return strtolower((string) preg_replace('/[_\s-]+/u', '-', trim($key)));
+}
+
 function printValues(array $values, string $prefix = ''): void
 {
     if ($values === []) {
@@ -296,7 +329,8 @@ function printValues(array $values, string $prefix = ''): void
             ? rtrim(rtrim(number_format($entry['value'], 1, ',', ''), '0'), ',')
             : (string) $entry['value'];
         $unit = $entry['unit'] !== '' ? ' ' . $entry['unit'] : '';
-        echo sprintf("%s%-38s %s%s\n", $prefix, $entry['label'] . ':', $formatted, $unit);
+        $command = germanJsonKey($entry['label'], $entry['unit']);
+        echo sprintf("%s%-38s %-16s Befehl: %s\n", $prefix, $entry['label'] . ':', $formatted . $unit, $command);
     }
 }
 
@@ -312,6 +346,11 @@ function printHelp(): void
     echo "  php json-buderus-km271-loop.php [--host=IP] [--port=8234] [--duration=30] [--log-mode=1] [--debug=1]\n\n";
     echo "Befehle:\n";
     echo "  [leer], werte         dekodierte Buderus-Werte anzeigen\n";
+    echo "  WERTNAME              Einzelwert ausgeben, z.B. Brennerlaufzeit_Stunden (siehe Befehl hinter jedem Wert)\n";
+    echo "  brennerlaufzeit        Kurzform fuer Brennerlaufzeit_Stunden\n";
+    echo "  WORTANFANG            alle passenden Werte, z.B. warm, hk1, hk1_ oder hk1-\n";
+    echo "                       Wortanfaenge reichen aus; _ oder - am Ende sind nicht erforderlich.\n";
+    echo "                       Beispiel: warm zeigt alle empfangenen Warmwasser-Werte mit Namen und Einheit.\n";
     echo "  r [SEKUNDEN]          weitere Telegramme sammeln\n";
     echo "  last                  letztes Rohtelegramm anzeigen\n";
     echo "  telegramme            alle Rohtelegramme anzeigen (Diagnose)\n";

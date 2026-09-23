@@ -91,6 +91,16 @@ function getLookupReference(mysql_dialog $db, string $table, string $text): int
     static $cache = [];
     $key = $table . "\0" . $text;
     if (isset($cache[$key])) return $cache[$key];
+    // Vorhandene Eintraege zuerst lesen: INSERT ... ON DUPLICATE KEY
+    // verbraucht auch bei Treffern AUTO_INCREMENT-IDs (hier TINYINT).
+    $lookup = $db->prepare("SELECT id FROM `$table` WHERE `text` = ? LIMIT 1");
+    if (!$lookup) throw new \RuntimeException("prepare lookup $table failed");
+    $lookup->bind_param('s', $text);
+    $lookup->execute();
+    $lookup->bind_result($existingId);
+    $found = $lookup->fetch();
+    $lookup->close();
+    if ($found) return $cache[$key] = (int) $existingId;
     $stmt = $db->prepare("INSERT INTO `$table` (`text`) VALUES (?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)");
     if (!$stmt) throw new \RuntimeException("prepare lookup $table failed");
     $stmt->bind_param('s', $text);

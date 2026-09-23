@@ -98,7 +98,8 @@ class SensorManager
             }
 
             $outputMode = strtolower(trim((string) ($sensor['outputMode'] ?? 'absolute')));
-            if ($outputMode === '' || $outputMode === 'absolute') {
+            // Zählerdifferenzen werden erst beim Abruf des History-Charts berechnet.
+            if ($outputMode === '' || $outputMode === 'absolute' || $outputMode === 'counter') {
                 continue;
             }
 

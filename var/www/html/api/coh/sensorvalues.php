@@ -7,6 +7,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__.'/api_env.php';
+require_once __DIR__.'/counter_history.php';
 
 // gzip Kompression (massiver Speed Boost bei vielen Daten)
 if (isset($_SERVER['HTTP_ACCEPT_ENCODING']) && strpos($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip') !== false) {
@@ -57,6 +58,20 @@ foreach (explode(',', (string)($_GET['sensorIDs'] ?? '')) as $requestedSensorId)
     if ($requestedSensorId !== '') $requestedSensorIds[$requestedSensorId] = true;
 }
 $now = time();
+$chartUnit = (string) ($_GET['chartUnit'] ?? '');
+$chartTimezone = null;
+if ($chartUnit !== '') {
+    try {
+        if (!$hasRange || !in_array($chartUnit, ['day', 'week', 'month', 'year'], true)) {
+            throw new InvalidArgumentException('Invalid chart unit');
+        }
+        $chartTimezone = new DateTimeZone((string) ($_GET['timezone'] ?? 'Europe/Berlin'));
+    } catch (Throwable $exception) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'invalid_chart_options']);
+        exit;
+    }
+}
 
 if ($hasRange) {
     if ($from === null || $to === null || $from < 0 || $to <= $from) {
@@ -102,6 +117,12 @@ if ($requestedSensorIds !== []) {
 }
 
 // Nur dann verdichten, wenn wenigstens ein angefragter Sensor tatsaechlich
+$counterSensorFilter = $sensorFilter;
+if ($chartUnit !== '') {
+    $sensorFilter = ($sensorFilter === '' ? '' : $sensorFilter.' AND ')."COALESCE(s.outputMode, '') <> 'counter'";
+}
+
+// Nur dann verdichten, wenn wenigstens ein angefragter Sensor tatsaechlich
 // mehr als maxPoints Rohwerte besitzt. Kleine Datenmengen bleiben unveraendert.
 $shouldAggregate = false;
 if ($hasRange && $maxPoints > 0) {
@@ -131,6 +152,16 @@ $select = "SELECT v.tstamp, s.sensorID, s.sensorTitle, s.sensorLokalId,
              JOIN tl_coh_sensors s ON s.id = v.sensor
              JOIN tl_coh_sensoreinheiten e ON e.id = v.einheit
              JOIN tl_coh_sensortypen t ON t.id = v.sensorType";
+$counterRows = [];
+if ($chartUnit !== '') {
+    try {
+        $counterRows = cohFetchCounterHistory($db, $select, $counterSensorFilter, $from, min($to, $now), $chartUnit, $chartTimezone);
+    } catch (Throwable $exception) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'counter_history_failed']);
+        exit;
+    }
+}
 if ($latest) {
     $sql = $select . "
              JOIN (
@@ -216,6 +247,14 @@ while ($r = $res->fetch_assoc()) {
     }
     $first = false;
 
+    echo json_encode($r, JSON_UNESCAPED_UNICODE);
+}
+
+// Abschluss JSON
+foreach ($counterRows as $r) {
+    if (!$first) echo ',';
+    $first = false;
+    $maxT = max($maxT, (int) $r['tstamp']);
     echo json_encode($r, JSON_UNESCAPED_UNICODE);
 }
 
