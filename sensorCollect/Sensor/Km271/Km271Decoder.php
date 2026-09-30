@@ -39,7 +39,7 @@ final class Km271Decoder
             0x8116 => ['hc2RoomSetpoint', 'HK2 Raum Solltemperatur', '°C', 0.5, false],
             0x8117 => ['hc2RoomTemperature', 'HK2 Raum Isttemperatur', '°C', 0.5, false],
             0x811A => ['hc2PumpPower', 'HK2 Pumpenleistung', '%', 1.0, false],
-            0x811B => ['hc2MixerPosition', 'HK2 Mischerstellung', '%', 1.0, true],
+            0x811B => ['hc2MixerPosition', 'HK2 Mischerstellung', '', 1.0, true],
             0x8426 => ['hotWaterSetpoint', 'Warmwasser Solltemperatur', '°C', 1.0, false],
             0x8427 => ['hotWaterTemperature', 'Warmwasser Isttemperatur', '°C', 1.0, false],
             0x8428 => ['hotWaterOptimization', 'Warmwasser Einschaltoptimierung', 'min', 1.0, false],
@@ -115,7 +115,9 @@ final class Km271Decoder
         $burnerTypes = ['1-stufig', '2-stufig', 'Modulierend'];
         $heatingPrograms = ['Eigen', 'Familie', 'Früh', 'Spät', 'Vormittag', 'Nachmittag', 'Mittag', 'Single', 'Senior'];
 
-        if ($register === 0x0000 && count($data) >= 8) {
+        if ($register === 0x0169 && count($data) >= 3) {
+            $this->put($updated, 'hc2HeatingProgram', 'HK2 Heizprogramm', $heatingPrograms[$at(2)] ?? ('Code ' . $at(2)), '', $register, $at(2));
+        } elseif ($register === 0x0000 && count($data) >= 8) {
             $summerRaw = $at(3);
             $summer = $summerRaw === 9 ? 'Sommer' : ($summerRaw === 31 ? 'Winter' : $summerRaw);
             $summerUnit = is_int($summer) ? '°C' : '';

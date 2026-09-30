@@ -2,7 +2,6 @@
 
 LIMIT=70
 LOGFILE="/home/peter/coh/logs/check_disk_usage.log"
-TO="pbd@gmx.de"
 
 # Diese Mountpoints müssen immer eingehängt sein.
 REQUIRED_MOUNTPOINTS=(
@@ -14,13 +13,9 @@ REQUIRED_MOUNTPOINTS=(
 # Wartezeit bei zunächst fehlendem Mountpoint.
 MOUNT_RETRY_SECONDS=60
 
-SCRIPT_PATH="$(readlink -f "$0")"
-HOST="$(hostname)"
 NOW="$(date '+%F %T')"
 
 JSON_ITEMS=()
-WARNINGS=()
-DF_OUTPUT=""
 PARTS=()
 
 # Alle aktuell eingehängten echten Datenträger ermitteln.
@@ -70,10 +65,10 @@ for PART in "${PARTS[@]}"; do
       echo "$NOW - FEHLER: $ERROR_TEXT" >> "$LOGFILE"
 
       JSON_ITEMS+=(
-        "{\"Partition\":\"${PART}\",\"value\":null,\"einheit\":\"%\",\"totalHuman\":null,\"usedHuman\":null,\"availableHuman\":null,\"status\":\"nicht eingehängt\"}"
+        "{\"Partition\":\"${PART}\",\"value\":0,\"einheit\":\"%\",\"totalHuman\":\"0\",\"usedHuman\":\"0\",\"availableHuman\":\"0\",\"status\":\"nicht eingehängt\"}"
       )
 
-      WARNINGS+=("$ERROR_TEXT")
+      # Fehler nur im JSON und Log melden.
       continue
     else
       echo "$NOW - INFO: $PART ist nach erneuter Prüfung eingehängt" >> "$LOGFILE"
@@ -87,10 +82,10 @@ for PART in "${PARTS[@]}"; do
     echo "$NOW - FEHLER: $ERROR_TEXT" >> "$LOGFILE"
 
     JSON_ITEMS+=(
-      "{\"Partition\":\"${PART}\",\"value\":null,\"einheit\":\"%\",\"totalHuman\":null,\"usedHuman\":null,\"availableHuman\":null,\"status\":\"nicht lesbar\"}"
+      "{\"Partition\":\"${PART}\",\"value\":0,\"einheit\":\"%\",\"totalHuman\":\"0\",\"usedHuman\":\"0\",\"availableHuman\":\"0\",\"status\":\"nicht lesbar\"}"
     )
 
-    WARNINGS+=("$ERROR_TEXT")
+    # Fehler nur im JSON und Log melden.
     continue
   fi
 
@@ -120,10 +115,10 @@ for PART in "${PARTS[@]}"; do
     echo "$NOW - FEHLER: $ERROR_TEXT" >> "$LOGFILE"
 
     JSON_ITEMS+=(
-      "{\"Partition\":\"${PART}\",\"value\":null,\"einheit\":\"%\",\"totalHuman\":null,\"usedHuman\":null,\"availableHuman\":null,\"status\":\"ungültiger Wert\"}"
+      "{\"Partition\":\"${PART}\",\"value\":0,\"einheit\":\"%\",\"totalHuman\":\"0\",\"usedHuman\":\"0\",\"availableHuman\":\"0\",\"status\":\"ungültiger Wert\"}"
     )
 
-    WARNINGS+=("$ERROR_TEXT")
+    # Fehler nur im JSON und Log melden.
     continue
   fi
 
@@ -182,56 +177,9 @@ for PART in "${PARTS[@]}"; do
   )"
 
   if [ "$LIMIT_REACHED" -eq 1 ]; then
-    WARNINGS+=(
-      "$PART: ${USAGE}% belegt, Gesamt: ${TOTAL_HUMAN}, Belegt: ${USED_HUMAN}, Frei: ${AVAILABLE_HUMAN}"
-    )
-
-    DF_OUTPUT+=$'\n'
-    DF_OUTPUT+="df -h ${PART}:"
-    DF_OUTPUT+=$'\n'
-    DF_OUTPUT+="$(df -h "$PART")"
-    DF_OUTPUT+=$'\n'
+    echo "$NOW - FEHLER: $PART: ${USAGE}% belegt (Grenzwert: ${LIMIT}%), Gesamt: ${TOTAL_HUMAN}, Belegt: ${USED_HUMAN}, Frei: ${AVAILABLE_HUMAN}" >> "$LOGFILE"
   fi
 done
-
-# Warnmail versenden.
-if [ "${#WARNINGS[@]}" -gt 0 ]; then
-  WARNING_LIST="$(printf -- '- %s\n' "${WARNINGS[@]}")"
-
-  SUBJECT="Raspberry Speicherwarnung: $HOST"
-
-  NOW="$(date '+%F %T')"
-
-  BODY="Warnung auf $HOST:
-
-${WARNING_LIST}
-Grenzwert: ${LIMIT}%
-Zeit: $NOW
-${DF_OUTPUT}
-Skript: $SCRIPT_PATH
-
-Hinweis: In phpMyAdmin kann die Tabelle tl_coh_sensorvalue
-auf ein halbes Jahr verkleinert werden.
-
-Testlauf:
-SELECT * FROM tl_coh_sensorvalue
-WHERE tstamp < UNIX_TIMESTAMP(NOW() - INTERVAL 6 MONTH);
-
-Löschen:
-DELETE FROM tl_coh_sensorvalue
-WHERE tstamp < UNIX_TIMESTAMP(NOW() - INTERVAL 6 MONTH);
-"
-
-  if printf \
-    "Subject: %s\nFrom: pbd@gmx.de\nTo: %s\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n\n%s\n" \
-    "$SUBJECT" "$TO" "$BODY" |
-    msmtp -a gmx "$TO"
-  then
-    echo "$NOW - WARNUNG für ${#WARNINGS[@]} Problem(e) gesendet" >> "$LOGFILE"
-  else
-    echo "$NOW - FEHLER: Warnmail konnte nicht gesendet werden" >> "$LOGFILE"
-  fi
-fi
 
 # JSON-Ausgabe erzeugen.
 (

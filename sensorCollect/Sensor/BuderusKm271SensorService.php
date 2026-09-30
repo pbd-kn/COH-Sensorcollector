@@ -9,7 +9,7 @@ use PbdKn\cohSensorcollector\SimpleHttpClient;
 use PbdKn\cohSensorcollector\Sensor\Km271\Km271Decoder;
 use PbdKn\cohSensorcollector\Sensor\Km271\Protocol3964R;
 
-/** Liest Status- und HK1-Werte eines Buderus KM271 ueber TCP/3964R. */
+/** Liest Statuswerte beider Heizkreise eines Buderus KM271 ueber TCP/3964R. */
 final class BuderusKm271SensorService implements SensorFetcherInterface
 {
     private const DEFAULT_PORT = 8234;
@@ -18,7 +18,7 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
     private array $cachedValues = [];
     private bool $persistentCacheLoaded = false;
 
-    /** Nur allgemeine Anlagenwerte und Heizkreis 1; HK2 bleibt bewusst ausgenommen. */
+    /** Allgemeine Anlagenwerte und die verfuegbaren Werte beider Heizkreise. */
     private const EXPORTED_KEYS = [
         'hc1SummerThreshold', 'hc1NightTemperature', 'hc1DayTemperature',
         'hc1OperatingMode', 'hc1HolidayTemperature', 'hc1MaximumTemperature',
@@ -27,6 +27,8 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
         'hc1FlowTemperature', 'hc1RoomSetpoint', 'hc1RoomTemperature',
         'hc1StartOptimization', 'hc1StopOptimization', 'hc1PumpPower',
         'hc1MixerPosition',
+        'hc2HeatingProgram', 'hc2FlowSetpoint', 'hc2FlowTemperature', 'hc2RoomSetpoint',
+        'hc2RoomTemperature', 'hc2PumpPower', 'hc2MixerPosition',
         'frostThreshold', 'hotWaterConfiguredTemperature', 'hotWaterOperatingMode',
         'hotWaterEnabled', 'hotWaterCirculationSetting', 'hotWaterSetpoint',
         'hotWaterTemperature', 'hotWaterOptimization', 'hotWaterChargePump',
@@ -149,6 +151,7 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
 
     private function readValuesAttempt(string $host, int $port): array
     {
+        $connectionLock = new \PbdKn\cohSensorcollector\Sensor\Km271\Km271ConnectionLock($host, $port);
         $errno = 0;
         $error = '';
         $stream = @stream_socket_client(
@@ -158,6 +161,7 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
             min(10.0, self::TELEGRAM_TIMEOUT),
         );
         if (!is_resource($stream)) {
+            $connectionLock->release();
             throw new \RuntimeException("Verbindung zu $host:$port fehlgeschlagen: [$errno] $error");
         }
 
@@ -197,6 +201,7 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
             }
         } finally {
             fclose($stream);
+            $connectionLock->release();
         }
 
         return array_intersect_key($decoder->values(), array_flip(self::EXPORTED_KEYS));

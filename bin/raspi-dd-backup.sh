@@ -46,6 +46,7 @@ DB_USER="peter"
 DB_PASS="sql666sql"
 
 SERVICES=(
+  collect.service
   heizstab.service
   mosquitto.service
   mariadb.service

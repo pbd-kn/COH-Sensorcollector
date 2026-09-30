@@ -17,6 +17,7 @@ final class Km271WriteCommandEncoder
     public function catalog(): array
     {
         return [
+            'HK2_Heizprogramm' => $this->choice('HK2 Heizprogramm', ['Eigen', 'Familie', 'Früh', 'Spät', 'Vormittag', 'Nachmittag', 'Mittag', 'Single', 'Senior']),
             'HK1_Betriebsart' => $this->choice('HK1 Betriebsart', ['Nacht', 'Tag', 'Automatik']),
             'HK1_Tagtemperatur' => $this->number('HK1 Tagtemperatur', '°C', 10, 30, 0.5),
             'HK1_Nachttemperatur' => $this->number('HK1 Nachttemperatur', '°C', 10, 30, 0.5),
@@ -54,6 +55,7 @@ final class Km271WriteCommandEncoder
         }
 
         [$normalized, $unit, $bytes] = match ($localId) {
+            'HK2_Heizprogramm' => $this->enumPayload($value, ['Eigen', 'Familie', 'Früh', 'Spät', 'Vormittag', 'Nachmittag', 'Mittag', 'Single', 'Senior'], [0x12, 0x00, null, 0x65, 0x65, 0x65, 0x65, 0x65], $localId, null),
             'HK1_Betriebsart' => $this->enumPayload($value, ['Nacht', 'Tag', 'Automatik'], [0x07, 0x00, 0x65, 0x65, 0x65, 0x65, null, 0x65], $localId),
             'HK1_Tagtemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, 0x65, null, 0x65, 0x65], $localId),
             'HK1_Nachttemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, null, 0x65, 0x65, 0x65], $localId),

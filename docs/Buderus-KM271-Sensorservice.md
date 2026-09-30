@@ -40,8 +40,13 @@ Sensor eingetragenen Einheit.
 | `km271.brenner.stufe1` | `Brenner_Stufe_1` | leer | `Status` |
 | `km271.stoerung` | `Störung_Brenner` | leer | `Status` |
 
-Der Sammelsensor `KM271` enthält allgemeine Anlagenwerte und HK1, aber bewusst
-keine HK2-Werte. Beispiel:
+Der Sammelsensor `KM271` enthält allgemeine Anlagenwerte, HK1 und die vom
+Decoder unterstützten HK2-Statuswerte: `HK2_Vorlauf_Solltemperatur`,
+`HK2_Vorlauf_Isttemperatur`, `HK2_Raum_Solltemperatur`,
+`HK2_Raum_Isttemperatur`, `HK2_Pumpenleistung` und `HK2_Mischerstellung`.
+Diese Schlüssel können auch als `sensorLokalId` für einzelne History-Sensoren
+verwendet werden. Sie erscheinen erst nach Empfang entsprechender Telegramme.
+Beispiel:
 
 ```json
 {

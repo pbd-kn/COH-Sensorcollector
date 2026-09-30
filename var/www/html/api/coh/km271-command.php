@@ -26,6 +26,8 @@ require_once $autoload;
 
 use PbdKn\cohSensorcollector\Sensor\Km271\Km271WriteCommandEncoder;
 use PbdKn\cohSensorcollector\Sensor\Km271\Protocol3964R;
+use PbdKn\cohSensorcollector\Sensor\Km271\Km271Schedule;
+use PbdKn\cohSensorcollector\Sensor\Km271\Km271ConnectionLock;
 
 function km271Respond(int $status, array $payload): never
 {
@@ -53,6 +55,7 @@ if ($method === 'GET') {
         'Sendebereit' => $writeEnabled,
         'EchtbetriebErlaubt' => $executable,
         'Schreibauftraege' => $encoder->catalog(),
+        'SchaltzeitenVersion' => 1,
     ]);
 }
 
@@ -65,6 +68,40 @@ try {
     $request = json_decode((string) file_get_contents('php://input'), true, 512, JSON_THROW_ON_ERROR);
     if (!is_array($request)) {
         throw new InvalidArgumentException('JSON-Objekt erwartet.');
+    }
+    if (isset($request['SchaltzeitenAktion'])) {
+        $action = $request['SchaltzeitenAktion'];
+        if (!in_array($action, ['read', 'preview', 'write'], true)) throw new InvalidArgumentException('Unbekannte Schaltzeiten-Aktion.');
+        $circuit = $request['Heizkreis'] ?? null;
+        if (!is_int($circuit)) throw new InvalidArgumentException('Heizkreis fehlt.');
+        $schedule = new Km271Schedule($circuit);
+        $plan = null;
+        if ($action !== 'read') {
+            if (!is_array($request['Ausgangsstand'] ?? null) || !is_array($request['Intervalle'] ?? null)) throw new InvalidArgumentException('Schaltzeiten oder Ausgangsstand fehlen.');
+            $plan = $schedule->preview($request['Ausgangsstand'], $request['Intervalle']);
+            if ($action === 'preview') km271Respond(200, ['ok' => true, 'Schaltzeiten' => $plan]);
+            if (!filter_var(cohApiEnv('COH_KM271_WRITE_ENABLED'), FILTER_VALIDATE_BOOLEAN)) throw new RuntimeException('KM271-Schreiben ist nicht freigeschaltet.');
+            if (($request['Bestaetigung'] ?? '') !== 'SCHREIBEN') throw new InvalidArgumentException('Die ausdrückliche Schreibbestätigung fehlt.');
+        }
+        set_time_limit(360);
+        $host = trim(cohApiEnv('COH_KM271_HOST')) ?: '192.168.178.70';
+        $port = (int) (trim(cohApiEnv('COH_KM271_PORT')) ?: '8234');
+        $connectionLock = new Km271ConnectionLock($host, $port);
+        $socket = @stream_socket_client("tcp://$host:$port", $errorNumber, $errorMessage, 5.0);
+        if (!is_resource($socket)) throw new RuntimeException("KM271 nicht erreichbar: $errorMessage ($errorNumber)");
+        try {
+            $protocol = new Protocol3964R($socket, static function (string $line) use (&$protocolLog): void {
+                $protocolLog[] = $line;
+                if (count($protocolLog) > 100) array_shift($protocolLog);
+            });
+            if ($action === 'write') error_log('KM271_SCHEDULE_INTENT ' . json_encode(['Heizkreis' => $circuit, 'Vorher' => $plan['base'], 'Nachher' => $plan['intervals'], 'Zeit' => date(DATE_ATOM)], JSON_UNESCAPED_UNICODE));
+            $scheduleResult = $action === 'read' ? $schedule->read($protocol) : $schedule->write($protocol, $plan);
+            if ($action === 'write') error_log('KM271_SCHEDULE_WRITE ' . json_encode(['Heizkreis' => $circuit, 'Vorher' => $plan['base'], 'Nachher' => $plan['intervals'], 'Ergebnis' => $scheduleResult], JSON_UNESCAPED_UNICODE));
+        } finally {
+            fclose($socket);
+            $connectionLock->release();
+        }
+        km271Respond(200, ['ok' => true, 'Schaltzeiten' => $scheduleResult]);
     }
     $preview = $encoder->encode(
         (string) ($request['LokaleId'] ?? ''),
@@ -86,6 +123,7 @@ try {
 
     $host = trim(cohApiEnv('COH_KM271_HOST')) ?: '192.168.178.70';
     $port = (int) (trim(cohApiEnv('COH_KM271_PORT')) ?: '8234');
+    $connectionLock = new Km271ConnectionLock($host, $port);
     $socket = @stream_socket_client("tcp://$host:$port", $errorNumber, $errorMessage, 5.0);
     if (!is_resource($socket)) {
         throw new RuntimeException("KM271 nicht erreichbar: $errorMessage ($errorNumber)");
@@ -105,6 +143,7 @@ try {
         $protocol->send(pack('C*', ...$preview['Nutzdaten']));
     } finally {
         fclose($socket);
+        $connectionLock->release();
     }
 
     $result = $preview;

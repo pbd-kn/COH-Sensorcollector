@@ -39,7 +39,7 @@ final class Km271Decoder
             0x8116 => ['hc2RoomSetpoint', 'HK2 Raum Solltemperatur', '°C', 0.5, false],
             0x8117 => ['hc2RoomTemperature', 'HK2 Raum Isttemperatur', '°C', 0.5, false],
             0x811A => ['hc2PumpPower', 'HK2 Pumpenleistung', '%', 1.0, false],
-            0x811B => ['hc2MixerPosition', 'HK2 Mischerstellung', '%', 1.0, true],
+            0x811B => ['hc2MixerPosition', 'HK2 Mischerstellung', '', 1.0, true],
             0x8426 => ['hotWaterSetpoint', 'Warmwasser Solltemperatur', '°C', 1.0, false],
             0x8427 => ['hotWaterTemperature', 'Warmwasser Isttemperatur', '°C', 1.0, false],
             0x8428 => ['hotWaterOptimization', 'Warmwasser Einschaltoptimierung', 'min', 1.0, false],
