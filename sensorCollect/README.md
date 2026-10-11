@@ -1,2 +1,0 @@
-# COH-Sensorcollector
-

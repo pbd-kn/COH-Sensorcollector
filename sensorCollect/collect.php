@@ -10,7 +10,6 @@ use PbdKn\cohSensorcollector\mysql_dialog;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\FetcherRegistry;
 use PbdKn\cohSensorcollector\Logger;
-use PbdKn\cohSensorcollector\SensorPararameter;
 //use mysqli;
 
 // ---------------------------------------------------------
@@ -18,13 +17,25 @@ use PbdKn\cohSensorcollector\SensorPararameter;
 // ---------------------------------------------------------
 date_default_timezone_set('Europe/Berlin');
 $logger = Logger::getInstance('/home/peter/coh/logs/sensor-collect.log');
-$SensorParameter = SensorParameter::getInstance();
 // DB-Verbindung
 $db = new mysql_dialog();
 if (!$db->connect('localhost', 'peter', 'sql666sql', 'co5_solar')) { 
     $logger->Error("DB connect failed: " . $db->errors);
     exit(1);
 }
+
+// Read-only maintenance preview: no sensor fetching or regular writes.
+if (PHP_SAPI === 'cli' && in_array('--cleanup-dry-run', $argv ?? [], true)) {
+    try {
+        $result = (new SensorHistoryCleanup())->run($db->getConnection(), true);
+        echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).PHP_EOL;
+        exit(($result['status'] ?? '') === 'dry_run' ? 0 : 1);
+    } catch (\Throwable $e) {
+        fwrite(STDERR, $e->getMessage().PHP_EOL);
+        exit(1);
+    }
+}
+$historyCleanup = new SensorHistoryCleanup();
 
 // ---------------------------------------------------------
 // Registry & Fetcher laden
@@ -519,7 +530,7 @@ function saveSensors(mysql_dialog $db, Logger $logger, array $arrResults ): int
 // Main-Loop
 // ---------------------------------------------------------
 
-function loadCollectorConfiguration(mysql_dialog $db, Logger $logger, SensorParameter $SensorParameter): int
+function loadCollectorConfiguration(mysql_dialog $db, Logger $logger): int
 {
     $res = $db->query("SELECT * FROM tl_coh_cfgcollect");
     if (!$res) {
@@ -529,16 +540,15 @@ function loadCollectorConfiguration(mysql_dialog $db, Logger $logger, SensorPara
     $debug = false;
     $pollTime = 15;
     while ($cfg = $res->fetch_assoc()) {
-        $logger->debugMe('cfgID: '.$cfg['cfgID'].' cfgType: '.$cfg['cfgType'].' cfgValue: '.$cfg['cfgValue']);
-        if ($cfg['cfgType'] === 'debug') {
+        $logger->debugMe('cfgID: '.$cfg['cfgID'].' beschreibung: '.$cfg['beschreibung'].' cfgValue: '.$cfg['cfgValue']);
+        if ($cfg['cfgID'] === 'debug') {
             $debug = ((int) $cfg['cfgValue'] !== 0);
-        } elseif ($cfg['cfgType'] === 'pollTime') {
+        } elseif ($cfg['cfgID'] === 'pollTime') {
             $pollTime = max(1, (int) $cfg['cfgValue']);
         }
     }
     $res->free();
     $logger->setDebug($debug);
-    $SensorParameter->setpollTime($pollTime);
     return $pollTime;
 }
 
@@ -817,7 +827,7 @@ $consoleMode = $isCli && ($hasInteractiveTerminal || $forceConsole);
 
 if ($consoleMode) {
     try {
-        loadCollectorConfiguration($db, $logger, $SensorParameter);
+        loadCollectorConfiguration($db, $logger);
     } catch (\Throwable $e) {
         $logger->Error($e->getMessage());
         fwrite(STDERR, 'Konfiguration konnte nicht geladen werden: ' . $e->getMessage() . PHP_EOL);
@@ -869,7 +879,7 @@ while (true) {
 
     // --- Konfiguration laden ---
     try {
-        $pollTime = loadCollectorConfiguration($db, $logger, $SensorParameter);
+        $pollTime = loadCollectorConfiguration($db, $logger);
     } catch (\Throwable $e) {
         $logger->Error($e->getMessage());
         // Fallback: 60 Sekunden warten, dann erneut versuchen
@@ -880,29 +890,18 @@ while (true) {
     // --- Werte abholen ---
     $arrResults = $manager->fetchAll();     // die db wird verwendet um alle senseren per querry zu lesen. sollte evtl in den Konstruktor von sensormanager rein 
     $anz = saveSensors($db, $logger, $arrResults );
-    // Erst aufraeumen, wenn Werte aelter als 1 Jahr vorhanden sind.
-    // Dann bis 10 Monate zurueck loeschen, damit der Cleanup nicht alle 10 Minuten kleine Mengen entfernt.
-    $cleanupSql = "DELETE FROM tl_coh_sensorvalue
-                    WHERE tstamp < UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 10 MONTH))
-                      AND EXISTS (
-                          SELECT 1
-                            FROM (
-                                SELECT id
-                                  FROM tl_coh_sensorvalue
-                                 WHERE tstamp < UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))
-                                 LIMIT 1
-                            ) AS old_sensorvalues
-                      )";
-    if ($db->query($cleanupSql)) {
-        $deleted = $db->affected();
-        if ($deleted > 0) {
-            $logger->Info("Cleanup: Es wurden in tl_coh_sensorvalue $deleted geloescht die aelter als 10 Monate sind, weil Werte aelter als 1 Jahr vorhanden waren.");
+    // First active run of each month, including catch-up after downtime.
+    try {
+        $cleanupResult = $historyCleanup->run($db->getConnection());
+        if ($cleanupResult['status'] === 'completed') {
+            $logger->Info('History cleanup: '.json_encode($cleanupResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         }
-    } else {
-        $logger->Error("cleanup failed beim Loeschen alter Saetze");
+    } catch (\Throwable $e) {
+        // No completion marker on failure: the next iteration retries safely.
+        $logger->Error($e->getMessage());
     }
     // Sleep
-    $sleepMinutes = max(1, (int) $SensorParameter->getpollTime());
+    $sleepMinutes = $pollTime;
     $sleepSeconds = $sleepMinutes * 60;
     $logger->Info("Iteration: $iteration " . date('d.m.Y H:i:s') . " anz. sensor ($anz) Sleep (Minuten): $sleepMinutes");
     sleep($sleepSeconds);

@@ -3,15 +3,11 @@
 namespace PbdKn\cohSensorcollector;
 use Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\Logger;
-use PbdKn\cohSensorcollector\SensorPararameter;
 
 class SensorManager
 {
-    private SensorParameter $SensorParameter;
-
     //public function __construct(array $fetchers)
     public function __construct( private mysql_dialog $db, private Logger $logger, private array $fetchers) {
-        $this->SensorParameter = SensorParameter::getInstance();
     }
     public function fetchAll(): array
     {
@@ -24,9 +20,6 @@ class SensorManager
      */
     public function fetchSensors(array $selection = [], bool $updateHistoryCounters = false): array
     {
-        $pollTime=$this->SensorParameter->getpollTime();  // Minuten
-        $this->logger->debugMe( "Fetcher polltime $pollTime");
-
         // lese alle sensoren incl. geraet
         $sql = "SELECT sensor.*, geraet.* ";
         $sql .= "FROM tl_coh_sensors AS sensor ";

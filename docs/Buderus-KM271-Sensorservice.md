@@ -66,6 +66,17 @@ Beispiel:
 
 ## Raspberry Pi
 
+### Aktiver Sommer-/Winterbetrieb
+
+`HK1_Sommerbetrieb` und `HK2_Sommerbetrieb` enthalten den von der Logamatic
+gemeldeten Status: `1` = Sommerbetrieb (Schirm), `0` = Winterbetrieb.
+Ausgewertet wird Bit 0 der Register `0x8001` beziehungsweise `0x8113`.
+Andere Bits dieser Register beeinflussen diesen Wert nicht. Die Werte erscheinen
+erst nach Empfang des jeweiligen Telegramms. `HK1_Sommergrenze` bleibt die
+separate Umschaltschwelle. Die Webseite zeigt den Status als Klartext an.
+
+Pruefung: `php execScripts/km271-summer-mode-test.php`.
+
 Diese Dateien müssen gemeinsam nach
 `/home/peter/scripts/coh/sensorcollect/Sensor/` übertragen werden:
 

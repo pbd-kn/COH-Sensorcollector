@@ -180,7 +180,7 @@ function getLocalRegulationValues()
         $val='temperature';      //Für errormessage
         $temperature = normalizeTemperatureValue(getHeizstabdata('temp1'));
         $val='targetTemperature';      //Für errormessage
-        $targetTemperature = getTargetWaterTemp();
+        $targetTemperature = getConfiguredTargetWaterTemp();
         if (!is_numeric($batterySoc) || !is_numeric($temperature) || !is_numeric($targetTemperature)) {
             throw new RuntimeException('Regelungswerte fehlen: batterySoc=' . formatLogValue($batterySoc) . ', temperature=' . formatLogValue($temperature) . ', targetTemperature=' . formatLogValue($targetTemperature));
         }
@@ -571,6 +571,50 @@ function normalizeTemperatureValue($value): ?float
     return $temperature > 100 ? $temperature / 10 : $temperature;
 }
 
+/** Remoteconfig wie pollTime; fehlenden Wert einmalig vom Heizstab uebernehmen. */
+function getConfiguredTargetWaterTemp(): ?float
+{
+    global $logger;
+    $fallback = getTargetWaterTemp();
+    try {
+        // Dieselbe lokale Datenbankverbindung wie sensorCollect/collect.php verwenden.
+        $collectorFile = __DIR__ . '/../sensorCollect/collect.php';
+        if (!is_file($collectorFile)) { $collectorFile = __DIR__ . '/../sensorcollect/collect.php'; }
+        $collector = (string)file_get_contents($collectorFile);
+        if (!preg_match("/->connect\\('([^']*)',\\s*'([^']*)',\\s*'([^']*)',\\s*'([^']*)'\\)/", $collector, $connection)) {
+            throw new RuntimeException('Collector-Datenbankkonfiguration fehlt.');
+        }
+        $db = new mysqli($connection[1], $connection[2], $connection[3], $connection[4]);
+        try {
+            $result = $db->query("SELECT cfgValue FROM tl_coh_cfgcollect WHERE cfgID='zieltempheizungsteuerung' ORDER BY id DESC LIMIT 1");
+            if ($result === false) { throw new RuntimeException('Zieltemperatur konnte nicht gelesen werden.'); }
+            $row = $result->fetch_assoc();
+            $result->free();
+            if ($row !== null) {
+                $value = $row['cfgValue'];
+                if (is_numeric($value) && is_finite((float)$value) && (float)$value > 0 && (float)$value <= 100) {
+                    return (float)$value;
+                }
+                $logger->Error('Ungueltige zieltempheizungsteuerung; Heizstab-Standardwert wird verwendet.');
+            } elseif ($fallback !== null) {
+                $stmt = $db->prepare("INSERT INTO tl_coh_cfgcollect (tstamp, cfgID, beschreibung, cfgValue) SELECT ?, 'zieltempheizungsteuerung', 'Zieltemperatur Heizungssteuerung (°C)', ? WHERE NOT EXISTS (SELECT 1 FROM tl_coh_cfgcollect WHERE cfgID='zieltempheizungsteuerung')");
+                if ($stmt === false) { throw new RuntimeException('Zieltemperatur konnte nicht gespeichert werden.'); }
+                $timestamp = time();
+                $value = (string)$fallback;
+                $stmt->bind_param('is', $timestamp, $value);
+                if (!$stmt->execute()) { throw new RuntimeException('Zieltemperatur konnte nicht gespeichert werden.'); }
+                $stmt->close();
+                $logger->Info('zieltempheizungsteuerung mit Heizstab-Standardwert ' . $value . ' C in Remoteconfig angelegt.');
+            }
+        } finally {
+            $db->close();
+        }
+    } catch (Throwable $e) {
+        $logger->Error('Remoteconfig-Zieltemperatur nicht verfuegbar; Heizstab-Standardwert wird verwendet.');
+    }
+    return $fallback;
+}
+
 function getTargetWaterTemp(): ?float
 {
     global $aktData, $setupData;
@@ -711,6 +755,19 @@ function getSleepUntilNextInterval(array $heizIntervalle, int $repeat): array
     ];
 }
 
+
+// Liest nur Heizstab/Remoteconfig und legt den Standardwert an; keine Schaltaktion.
+if (strtolower((string)($argv[1] ?? '')) === 'target-config') {
+    $params = json_decode((string)file_get_contents($paramsFile), true);
+    if (!is_array($params)) { fwrite(STDERR, "Ungueltige Parameterdatei\n"); exit(1); }
+    if (isset($params['urlheizStab'])) { $urlheizStab = normalizeBaseUrl((string)$params['urlheizStab']); }
+    configureHeizstabAuth($params);
+    $aktData = getdata();
+    $setupData = getsetup();
+    $target = getConfiguredTargetWaterTemp();
+    echo 'zieltempheizungsteuerung=' . formatLogValue($target) . PHP_EOL;
+    exit($target === null ? 1 : 0);
+}
 
 if (strtolower((string)($argv[1] ?? '')) === 'modbus-test') {
     $testParamsFile = (string)($argv[2] ?? $paramsFile);

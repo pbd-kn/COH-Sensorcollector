@@ -58,7 +58,13 @@ final class Km271Decoder
             $this->put($updated, $key, $label, $number * $factor, $unit, $register, $raw);
         }
 
-        if ($register === 0x8429) {
+        if ($register === 0x8001 || $register === 0x8113) {
+            $this->putBits($updated, $register, $raw, [
+                0 => $register === 0x8001
+                    ? ['hc1SummerMode', 'HK1 Sommerbetrieb']
+                    : ['hc2SummerMode', 'HK2 Sommerbetrieb'],
+            ]);
+        } elseif ($register === 0x8429) {
             $this->putBits($updated, $register, $raw, [
                 0 => ['hotWaterChargePump', 'Warmwasser Ladepumpe'],
                 1 => ['hotWaterCirculationPump', 'Warmwasser Zirkulationspumpe'],

@@ -4,7 +4,6 @@ namespace PbdKn\cohSensorcollector\Sensor;
 
 use PbdKn\cohSensorcollector\Logger;
 use PbdKn\cohSensorcollector\mysql_dialog;
-use PbdKn\cohSensorcollector\BundleSettings;
 use PbdKn\cohSensorcollector\Sensor\SensorFetcherInterface;
 use PbdKn\cohSensorcollector\SimpleHttpClient;
 

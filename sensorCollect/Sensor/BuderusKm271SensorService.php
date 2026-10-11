@@ -20,14 +20,14 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
 
     /** Allgemeine Anlagenwerte und die verfuegbaren Werte beider Heizkreise. */
     private const EXPORTED_KEYS = [
-        'hc1SummerThreshold', 'hc1NightTemperature', 'hc1DayTemperature',
+        'hc1SummerMode', 'hc1SummerThreshold', 'hc1NightTemperature', 'hc1DayTemperature',
         'hc1OperatingMode', 'hc1HolidayTemperature', 'hc1MaximumTemperature',
         'hc1DesignTemperature', 'hc1TemperatureOffset', 'hc1RemoteControl',
         'hc1HeatingProgram', 'hc1HolidayDays', 'hc1FlowSetpoint',
         'hc1FlowTemperature', 'hc1RoomSetpoint', 'hc1RoomTemperature',
         'hc1StartOptimization', 'hc1StopOptimization', 'hc1PumpPower',
         'hc1MixerPosition',
-        'hc2HeatingProgram', 'hc2FlowSetpoint', 'hc2FlowTemperature', 'hc2RoomSetpoint',
+        'hc2SummerMode', 'hc2HeatingProgram', 'hc2FlowSetpoint', 'hc2FlowTemperature', 'hc2RoomSetpoint',
         'hc2RoomTemperature', 'hc2PumpPower', 'hc2MixerPosition',
         'frostThreshold', 'hotWaterConfiguredTemperature', 'hotWaterOperatingMode',
         'hotWaterEnabled', 'hotWaterCirculationSetting', 'hotWaterSetpoint',

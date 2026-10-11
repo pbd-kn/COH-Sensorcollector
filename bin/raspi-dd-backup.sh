@@ -1,380 +1,271 @@
 #!/bin/bash
-#
-# Raspberry Pi FULL BACKUP – GEHÄRTET & VOLLSTÄNDIG
-# SD-Image + DB + System/Konfig + Lockfile + Fehlerbehandlung + Service-Restore
-#
-
 set -Eeuo pipefail
 
-############################
-# BASIS
-############################
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-umask 077
+umask 027
 
-############################
-# KONFIG
-############################
 BACKUP_BASE="/media/peter/USBBACKUP"
-DATE="$(date +%Y-%m-%d_%H-%M-%S)"
 BACKUP_ROOT="$BACKUP_BASE/backups"
+DATE="$(date +%Y-%m-%d_%H-%M-%S)"
 BACKUP_DIR="$BACKUP_ROOT/$DATE"
-MAX_BACKUPS=5
-
-IMAGE="$BACKUP_DIR/${DATE}_raspi.img.gz"
-MYSQL_DUMP="$BACKUP_DIR/${DATE}_mysql.sql.gz"
-
-SERVICE_BACKUP="$BACKUP_DIR/${DATE}_services.tar.gz"
-LOGROTATE_BACKUP="$BACKUP_DIR/${DATE}_logrotate.tar.gz"
-CRON_BACKUP_USER="$BACKUP_DIR/${DATE}_cron_peter.txt"
-CRON_BACKUP_ROOT="$BACKUP_DIR/${DATE}_cron_root.txt"
-CUSTOM_SCRIPTS_BACKUP="$BACKUP_DIR/${DATE}_custom_scripts.tar.gz"
-PKG_LIST="$BACKUP_DIR/${DATE}_packages.list"
-PKG_MANUAL="$BACKUP_DIR/${DATE}_packages_manual.txt"
-SYSFILES_BACKUP="$BACKUP_DIR/${DATE}_sysfiles.tar.gz"
-
-LOGFILE="$BACKUP_BASE/backup.log"
-LOCKFILE="/var/lock/raspi-dd-backup.lock"
-
-STATUS_OK="$BACKUP_BASE/ok_${DATE}.txt"
-STATUS_ABORT="$BACKUP_BASE/abgebrochen_${DATE}.txt"
+MAX_BACKUPS=15
 
 SOURCE_DEVICE="/dev/mmcblk0"
-DB_USER_TO_EXPORT_CRON="peter"
-
 DB_USER="peter"
 DB_PASS="sql666sql"
 
-SERVICES=(
-  collect.service
-  heizstab.service
-  mosquitto.service
-  mariadb.service
-)
+IMAGE="$BACKUP_DIR/${DATE}_raspi.img.gz"
+MYSQL_DUMP="$BACKUP_DIR/${DATE}_mysql.sql.gz"
+LOGFILE="$BACKUP_BASE/backup.log"
+LOCKFILE="/var/lock/raspi-dd-backup.lock"
+STATUS_OK="$BACKUP_BASE/ok_${DATE}.txt"
+STATUS_ABORT="$BACKUP_BASE/abgebrochen_${DATE}.txt"
 
-############################
-# FUNKTIONEN
-############################
+SERVICES=(collect.service heizstab.service mosquitto.service mariadb.service)
+
+SERVICES_STOPPED=0
+SERVICES_RESTORED=0
+
 log() {
-  echo "[$(date '+%F %T')] $*" | tee -a "$LOGFILE"
+    echo "[$(date '+%F %T')] $*" | tee -a "$LOGFILE"
 }
 
-fail() {
-  local msg="${1:-Unbekannter Fehler}"
-  log "ERROR: $(date '+%F %T') $msg"
-  echo "ABGEBROCHEN $(date '+%F %T') : $msg" > "$STATUS_ABORT"
-  exit 1
+start_services() {
+    log "[SERVICE] Starte wichtige Services"
+
+    for s in "${SERVICES[@]}"; do
+        if systemctl start "$s" >/dev/null 2>&1; then
+            log " -> Service gestartet: $s"
+        else
+            log " -> WARNUNG: Service konnte nicht gestartet werden: $s"
+        fi
+    done
 }
 
-start_all_services() {
-  log "[SERVICE] Starte wichtige Services"
+cleanup() {
+    rc=$?
+    trap - EXIT ERR INT TERM
 
-  for s in "${SERVICES[@]}"; do
-    if systemctl start "$s" >/dev/null 2>&1; then
-      log " -> Service gestartet: $s"
-    else
-      log " -> WARNUNG: Service konnte nicht gestartet werden: $s"
+    if [ "$SERVICES_STOPPED" -eq 1 ] && [ "$SERVICES_RESTORED" -eq 0 ]; then
+        start_services || true
     fi
-  done
+
+    if [ -d "$BACKUP_DIR" ]; then
+        chown -R peter:peter "$BACKUP_DIR" 2>/dev/null || true
+        find "$BACKUP_DIR" -type d -exec chmod 0750 {} \; 2>/dev/null || true
+        find "$BACKUP_DIR" -type f -exec chmod 0640 {} \; 2>/dev/null || true
+    fi
+
+    if [ -d "$BACKUP_ROOT" ]; then
+        chown root:peter "$BACKUP_ROOT" 2>/dev/null || true
+        chmod 2770 "$BACKUP_ROOT" 2>/dev/null || true
+    fi
+
+    [ -f "$LOGFILE" ] && chown peter:peter "$LOGFILE" 2>/dev/null || true
+    [ -f "$LOGFILE" ] && chmod 0644 "$LOGFILE" 2>/dev/null || true
+    [ -f "$STATUS_OK" ] && chown peter:peter "$STATUS_OK" 2>/dev/null || true
+    [ -f "$STATUS_OK" ] && chmod 0644 "$STATUS_OK" 2>/dev/null || true
+    [ -f "$STATUS_ABORT" ] && chown peter:peter "$STATUS_ABORT" 2>/dev/null || true
+    [ -f "$STATUS_ABORT" ] && chmod 0644 "$STATUS_ABORT" 2>/dev/null || true
+
+    sync 2>/dev/null || true
+    flock -u 9 2>/dev/null || true
+    rm -f "$LOCKFILE" 2>/dev/null || true
+
+    if [ "$rc" -eq 0 ]; then
+        log "Backup erfolgreich beendet"
+    else
+        echo "ABGEBROCHEN $(date '+%F %T') : Exit-Code $rc" > "$STATUS_ABORT" 2>/dev/null || true
+        chown peter:peter "$STATUS_ABORT" 2>/dev/null || true
+        chmod 0644 "$STATUS_ABORT" 2>/dev/null || true
+        log "=== Backup mit Fehler beendet (Exit-Code $rc) ==="
+    fi
+
+    exit "$rc"
 }
 
-cleanup_on_exit() {
-  local exit_code=$?
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-  start_all_services || true
+if [ "$(id -u)" -ne 0 ]; then
+    echo "FEHLER: Script muss mit sudo gestartet werden."
+    exit 1
+fi
 
-  sync || true
-  flock -u 9 || true
-  rm -f "$LOCKFILE" || true
+for cmd in mountpoint tar gzip dd sync df awk tee flock blockdev mysqldump dpkg apt-mark crontab systemctl find sort stat numfmt; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+        echo "FEHLER: Befehl fehlt: $cmd"
+        exit 1
+    }
+done
 
-  if [ "$exit_code" -eq 0 ]; then
-    log "Backup erfolgreich beendet"
-  else
-    log "Backup mit Fehler beendet (Exit-Code $exit_code)"
-    [ -f "$STATUS_ABORT" ] || echo "ABGEBROCHEN $(date '+%F %T') : Exit-Code $exit_code" > "$STATUS_ABORT"
-  fi
-
-  exit "$exit_code"
+[ -b "$SOURCE_DEVICE" ] || {
+    echo "FEHLER: Quellgerät fehlt: $SOURCE_DEVICE"
+    exit 1
 }
 
-on_error() {
-  local line="$1"
-  local cmd="$2"
-  log "FEHLER in Zeile $line: $cmd"
-  echo "ABGEBROCHEN $(date '+%F %T') : Zeile $line : $cmd" > "$STATUS_ABORT"
-  exit 1
+mountpoint -q "$BACKUP_BASE" || {
+    echo "FEHLER: USB-Stick nicht gemountet: $BACKUP_BASE"
+    exit 1
 }
 
-check_cmd() {
-  command -v "$1" >/dev/null 2>&1 || fail "Befehl nicht gefunden: $1"
-}
-
-############################
-# TRAPS
-############################
-trap cleanup_on_exit EXIT
-trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
-
-############################
-# LOCK
-############################
 mkdir -p /var/lock
 exec 9>"$LOCKFILE"
 
 if ! flock -n 9; then
-  fail "Es läuft bereits ein Backup"
+    echo "FEHLER: Es läuft bereits ein Backup."
+    exit 1
 fi
 
-############################
-# START
-############################
-mkdir -p "$BACKUP_BASE"
-touch "$LOGFILE" || fail "Logdatei kann nicht geschrieben werden: $LOGFILE"
-
-[ "$(id -u)" -eq 0 ] || fail "Script muss als root laufen"
-
-# FAT/exFAT/NTFS unterstuetzen keine normalen Linux-Gruppenrechte.
-# In diesem Fall darf das Backup trotzdem weiterlaufen.
-if chgrp www-data "$LOGFILE" 2>/dev/null; then
-  chmod 0640 "$LOGFILE"
-else
-  chmod 0600 "$LOGFILE" 2>/dev/null || true
-  log "WARNUNG: Gruppe www-data konnte fuer $LOGFILE nicht gesetzt werden"
-fi
-
-log "===================================="
-log "Backup START"
-log "===================================="
-
-############################
-# VORCHECKS
-############################
-check_cmd mountpoint
-check_cmd mkdir
-check_cmd tar
-check_cmd gzip
-check_cmd dd
-check_cmd sync
-check_cmd sleep
-check_cmd df
-check_cmd awk
-check_cmd grep
-check_cmd sed
-check_cmd tee
-check_cmd flock
-check_cmd blockdev
-check_cmd mysqldump
-check_cmd dpkg
-check_cmd apt-mark
-check_cmd crontab
-check_cmd systemctl
-check_cmd getent
-check_cmd sort
-check_cmd find
-
-[ -b "$SOURCE_DEVICE" ] || fail "Quellgerät nicht gefunden: $SOURCE_DEVICE"
-
-if ! mountpoint -q "$BACKUP_BASE"; then
-  fail "USB-Stick nicht gemountet: $BACKUP_BASE"
-fi
-
-touch "$BACKUP_BASE/.write_test" || fail "USB-Stick nicht beschreibbar: $BACKUP_BASE"
+touch "$BACKUP_BASE/.write_test"
 rm -f "$BACKUP_BASE/.write_test"
 
-mkdir -p "$BACKUP_ROOT"
+touch "$LOGFILE"
+chown peter:peter "$LOGFILE"
+chmod 0644 "$LOGFILE"
 
-############################
-# BACKUP-ROTATION
-############################
+mkdir -p "$BACKUP_ROOT"
+chown root:peter "$BACKUP_ROOT"
+chmod 2770 "$BACKUP_ROOT"
+
+log "=== Backup START ==="
+
 log "Backup-Rotation (maximal $MAX_BACKUPS Backups)"
 
-# Vor dem neuen Backup auf maximal vier alte Sicherungen reduzieren. Dadurch
-# müssen nie sechs vollständige Backups gleichzeitig auf den USB-Stick passen.
-mapfile -t BACKUP_DIRS < <(
-  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
-    | awk '/^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$/' \
-    | sort
+mapfile -t BACKUPS < <(
+    find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+    awk '/^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$/' |
+    sort
 )
 
-DELETE_COUNT=$(( ${#BACKUP_DIRS[@]} - MAX_BACKUPS + 1 ))
-if [ "$DELETE_COUNT" -gt 0 ]; then
-  for ((i = 0; i < DELETE_COUNT; i++)); do
-    OLD_BACKUP="$BACKUP_ROOT/${BACKUP_DIRS[$i]}"
+DELETE_COUNT=$(( ${#BACKUPS[@]} - MAX_BACKUPS + 1 ))
 
-    # Sicherheitsprüfung: ausschließlich direkte, datierte Unterordner löschen.
-    if [[ "$OLD_BACKUP" == "$BACKUP_ROOT"/* ]] \
-      && [[ "${BACKUP_DIRS[$i]}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]]; then
-      log " -> Entferne altes Backup: $OLD_BACKUP"
-      rm -rf -- "$OLD_BACKUP"
-    else
-      fail "Unsicheres Backup-Verzeichnis wird nicht gelöscht: $OLD_BACKUP"
-    fi
-  done
+if [ "$DELETE_COUNT" -gt 0 ]; then
+    for ((i=0; i<DELETE_COUNT; i++)); do
+        OLD="$BACKUP_ROOT/${BACKUPS[$i]}"
+        log " -> Entferne altes Backup: $OLD"
+        rm -rf -- "$OLD"
+    done
 else
-  log " -> Keine alten Backups zu entfernen (${#BACKUP_DIRS[@]}/$MAX_BACKUPS)"
+    log " -> Keine alten Backups zu entfernen (${#BACKUPS[@]}/$MAX_BACKUPS)"
 fi
 
 mkdir -p "$BACKUP_DIR"
+chown root:peter "$BACKUP_DIR"
+chmod 2750 "$BACKUP_DIR"
 
-############################
-# SPEICHERPLATZ PRÜFEN
-############################
-SOURCE_SIZE_BYTES="$(blockdev --getsize64 "$SOURCE_DEVICE")"
-TARGET_FREE_BYTES="$(df -PB1 "$BACKUP_BASE" | awk 'NR==2 {print $4}')"
+log "Backup-Verzeichnis: $BACKUP_DIR"
 
-log "Quellgröße: $(numfmt --to=iec "$SOURCE_SIZE_BYTES" 2>/dev/null || echo "$SOURCE_SIZE_BYTES Bytes")"
-log "Freier Platz: $(numfmt --to=iec "$TARGET_FREE_BYTES" 2>/dev/null || echo "$TARGET_FREE_BYTES Bytes")"
+SOURCE_SIZE="$(blockdev --getsize64 "$SOURCE_DEVICE")"
+FREE_SIZE="$(df -PB1 "$BACKUP_BASE" | awk 'NR==2 {print $4}')"
+REQUIRED=$(( SOURCE_SIZE * 80 / 100 ))
 
-REQUIRED_BYTES=$(( SOURCE_SIZE_BYTES * 80 / 100 ))
+log "Quellgröße: $(numfmt --to=iec "$SOURCE_SIZE")"
+log "Freier Platz: $(numfmt --to=iec "$FREE_SIZE")"
 
-if [ "$TARGET_FREE_BYTES" -lt "$REQUIRED_BYTES" ]; then
-  fail "Zu wenig freier Speicher am Ziel. Benötigt grob >= 80% der SD-Größe."
-fi
+[ "$FREE_SIZE" -ge "$REQUIRED" ] || {
+    log "=== FEHLER: Zu wenig freier Speicher."
+    exit 1
+}
 
-############################
-# [0] MariaDB sicher starten
-############################
-log "[0] Stelle sicher, dass MariaDB läuft"
+log "[1] MariaDB Dump"
 
-systemctl start mariadb.service >/dev/null 2>&1 || fail "MariaDB konnte nicht gestartet werden"
-sleep 3
+systemctl start mariadb.service
 
-############################
-# [1] MariaDB Dump
-############################
-log "[1] MariaDB Dump startet"
+MYSQL_PWD="$DB_PASS" mysqldump \
+    -u "$DB_USER" \
+    --single-transaction \
+    --routines \
+    --events \
+    --triggers \
+    --all-databases |
+    gzip -1 > "$MYSQL_DUMP"
 
-MYSQL_PWD="$DB_PASS" /usr/bin/mysqldump \
-  -u "$DB_USER" \
-  --single-transaction \
-  --routines \
-  --events \
-  --triggers \
-  --all-databases \
-  | gzip -1 > "$MYSQL_DUMP"
+log " -> DB Dump fertig"
 
-log " -> DB Dump fertig: $MYSQL_DUMP"
+log "[2] System und Konfiguration sichern"
 
-############################
-# [2] System & Konfiguration sichern
-############################
-log "[2] System & Konfiguration sichern"
-
-tar -czf "$SERVICE_BACKUP" /etc/systemd/system
-log " -> systemd gesichert"
-
-tar -czf "$LOGROTATE_BACKUP" /etc/logrotate.d
-log " -> logrotate gesichert"
-
-crontab -l > "$CRON_BACKUP_ROOT" 2>/dev/null || true
-log " -> root crontab gesichert"
-
-if getent passwd "$DB_USER_TO_EXPORT_CRON" >/dev/null 2>&1; then
-  crontab -u "$DB_USER_TO_EXPORT_CRON" -l > "$CRON_BACKUP_USER" 2>/dev/null || true
-  log " -> user crontab gesichert: $DB_USER_TO_EXPORT_CRON"
-fi
+tar -czf "$BACKUP_DIR/${DATE}_services.tar.gz" /etc/systemd/system
+tar -czf "$BACKUP_DIR/${DATE}_logrotate.tar.gz" /etc/logrotate.d
+crontab -l > "$BACKUP_DIR/${DATE}_cron_root.txt" 2>/dev/null || true
+crontab -u peter -l > "$BACKUP_DIR/${DATE}_cron_peter.txt" 2>/dev/null || true
+dpkg --get-selections > "$BACKUP_DIR/${DATE}_packages.list"
+apt-mark showmanual > "$BACKUP_DIR/${DATE}_packages_manual.txt"
 
 CUSTOM_PATHS=()
+
 [ -d /home/peter/scripts ] && CUSTOM_PATHS+=("/home/peter/scripts")
 [ -d /opt ] && CUSTOM_PATHS+=("/opt")
 [ -d /usr/local/bin ] && CUSTOM_PATHS+=("/usr/local/bin")
 
 if [ "${#CUSTOM_PATHS[@]}" -gt 0 ]; then
-  tar -czf "$CUSTOM_SCRIPTS_BACKUP" "${CUSTOM_PATHS[@]}"
-  log " -> Custom Scripts gesichert"
-else
-  log " -> Keine Custom-Script-Pfade gefunden"
+    tar -czf "$BACKUP_DIR/${DATE}_custom_scripts.tar.gz" "${CUSTOM_PATHS[@]}"
 fi
 
-dpkg --get-selections > "$PKG_LIST"
-apt-mark showmanual > "$PKG_MANUAL"
-log " -> Paketlisten gesichert"
+SYSFILES=()
 
-SYSFILES=(
-  /etc/fstab
-  /etc/hostname
-  /etc/hosts
-  /etc/passwd
-  /etc/group
-  /etc/shadow
-  /etc/sudoers
-)
-
-EXISTING=()
-for f in "${SYSFILES[@]}"; do
-  [ -f "$f" ] && EXISTING+=("$f")
+for f in /etc/fstab /etc/hostname /etc/hosts /etc/passwd /etc/group /etc/shadow /etc/sudoers; do
+    [ -f "$f" ] && SYSFILES+=("$f")
 done
 
-if [ "${#EXISTING[@]}" -gt 0 ]; then
-  tar -czf "$SYSFILES_BACKUP" "${EXISTING[@]}"
-  log " -> Sysfiles gesichert"
+if [ "${#SYSFILES[@]}" -gt 0 ]; then
+    tar -czf "$BACKUP_DIR/${DATE}_sysfiles.tar.gz" "${SYSFILES[@]}"
 fi
 
-log " -> System & Konfig gesichert"
+log " -> System und Konfiguration gesichert"
 
-############################
-# [3] Zero-Fill
-############################
-log "[3] Zero-Fill"
-log " -> Zero-Fill fertig"
-
-############################
-# [4] Services stoppen
-############################
-log "[4] Stoppe Services"
+log "[3] Stoppe Services"
 
 for s in "${SERVICES[@]}"; do
-  if systemctl stop "$s" >/dev/null 2>&1; then
-    log " -> stop $s"
-  else
-    log " -> WARNUNG: Service konnte nicht gestoppt werden oder existiert nicht: $s"
-  fi
+    if systemctl stop "$s" >/dev/null 2>&1; then
+        log " -> stop $s"
+    else
+        log " -> WARNUNG: $s konnte nicht gestoppt werden"
+    fi
 done
+
+SERVICES_STOPPED=1
 
 sync
 sleep 2
 
-############################
-# [5] SD-Backup
-############################
-log "[5] SD-Backup läuft – NICHT abbrechen"
+log "[4] SD-Backup läuft - NICHT abbrechen"
 
 dd if="$SOURCE_DEVICE" bs=4M status=progress | gzip -1 > "$IMAGE"
 
 sync
+
 log " -> SD-Backup fertig: $IMAGE"
 
-############################
-# [6] Services starten
-############################
-log "[6] Services starten"
+log "[5] Services starten"
 
-start_all_services
+start_services
+SERVICES_RESTORED=1
 
-############################
-# [7] Prüfen
-############################
-log "[7] Prüfe Backup-Dateien"
+log "[6] Prüfe Backup-Dateien"
 
-[ -s "$MYSQL_DUMP" ] || fail "MySQL-Dump ist leer"
-[ -s "$IMAGE" ] || fail "Image-Datei ist leer"
+[ -s "$MYSQL_DUMP" ] || {
+    log "===FEHLER: MySQL-Dump ist leer"
+    exit 1
+}
+
+[ -s "$IMAGE" ] || {
+    log "=== FEHLER: Image-Datei ist leer"
+    exit 1
+}
 
 IMAGE_SIZE="$(stat -c %s "$IMAGE")"
 MYSQL_SIZE="$(stat -c %s "$MYSQL_DUMP")"
 
-log " -> Image-Größe: $(numfmt --to=iec "$IMAGE_SIZE" 2>/dev/null || echo "$IMAGE_SIZE Bytes")"
-log " -> MySQL-Größe: $(numfmt --to=iec "$MYSQL_SIZE" 2>/dev/null || echo "$MYSQL_SIZE Bytes")"
+log " -> Image-Größe: $(numfmt --to=iec "$IMAGE_SIZE")"
+log " -> MySQL-Größe: $(numfmt --to=iec "$MYSQL_SIZE")"
 
-############################
-# [8] Status schreiben
-############################
 echo "OK $(date '+%F %T')" > "$STATUS_OK"
+chown peter:peter "$STATUS_OK"
+chmod 0644 "$STATUS_OK"
 
-############################
-# ENDE
-############################
-log "===================================="
-log "Backup FERTIG"
-log "===================================="
+ls -lh "$IMAGE" 2>&1 | tee -a "$LOGFILE"
 
-ls -lh "$IMAGE" | tee -a "$LOGFILE"
+log "=== Backup FERTIG ==="
+
