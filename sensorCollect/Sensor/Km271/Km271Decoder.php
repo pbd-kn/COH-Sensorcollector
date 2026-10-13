@@ -127,7 +127,7 @@ final class Km271Decoder
             $summerRaw = $at(3);
             $summer = $summerRaw === 9 ? 'Sommer' : ($summerRaw === 31 ? 'Winter' : $summerRaw);
             $summerUnit = is_int($summer) ? '°C' : '';
-            $this->put($updated, 'hc1SummerThreshold', 'HK1 Sommergrenze', $summer, $summerUnit, $register, $summerRaw);
+            $this->put($updated, 'hc1SummerThreshold', 'Sommergrenze', $summer, $summerUnit, $register, $summerRaw);
             $this->put($updated, 'hc1NightTemperature', 'HK1 Nachttemperatur', $at(4) / 2, '°C', $register, $at(4));
             $this->put($updated, 'hc1DayTemperature', 'HK1 Tagtemperatur', $at(5) / 2, '°C', $register, $at(5));
             $this->put($updated, 'hc1OperatingMode', 'HK1 Betriebsart', $modes[$at(6)] ?? ('Code ' . $at(6)), '', $register, $at(6));

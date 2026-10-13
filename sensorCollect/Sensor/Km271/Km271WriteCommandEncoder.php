@@ -22,8 +22,8 @@ final class Km271WriteCommandEncoder
             'HK1_Tagtemperatur' => $this->number('HK1 Tagtemperatur', '°C', 10, 30, 0.5),
             'HK1_Nachttemperatur' => $this->number('HK1 Nachttemperatur', '°C', 10, 30, 0.5),
             'HK1_Urlaubstemperatur' => $this->number('HK1 Urlaubstemperatur', '°C', 10, 30, 0.5),
-            'HK1_Sommergrenze' => [
-                'Bezeichnung' => 'HK1 Sommergrenze',
+            'Sommergrenze' => [
+                'Bezeichnung' => 'Sommergrenze',
                 'Typ' => 'TemperaturOderBetriebsart',
                 'Einheit' => '°C',
                 'Minimum' => 10,
@@ -50,6 +50,7 @@ final class Km271WriteCommandEncoder
     public function encode(string $localId, mixed $value): array
     {
         $localId = trim($localId);
+        if ($localId === 'HK1_Sommergrenze') $localId = 'Sommergrenze';
         if (!isset($this->catalog()[$localId])) {
             throw new InvalidArgumentException("KM271-Schreibauftrag '$localId' ist nicht erlaubt.");
         }
@@ -60,7 +61,7 @@ final class Km271WriteCommandEncoder
             'HK1_Tagtemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, 0x65, null, 0x65, 0x65], $localId),
             'HK1_Nachttemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, null, 0x65, 0x65, 0x65], $localId),
             'HK1_Urlaubstemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, 0x65, 0x65, 0x65, null], $localId),
-            'HK1_Sommergrenze' => $this->summerPayload($value),
+            'Sommergrenze' => $this->summerPayload($value),
             'HK1_Frostschutz_ab' => $this->integerPayload($value, -20, 10, [0x07, 0x31, 0x65, 0x65, 0x65, 0x65, 0x65, null], $localId, true),
             'HK1_Auslegungstemperatur' => $this->integerPayload($value, 30, 90, [0x07, 0x0E, 0x65, 0x65, 0x65, 0x65, null, 0x65], $localId),
             'HK1_Aufschalttemperatur' => $this->integerPayload($value, 0, 10, [0x07, 0x15, null, 0x65, 0x65, 0x65, 0x65, 0x65], $localId),
@@ -107,13 +108,13 @@ final class Km271WriteCommandEncoder
             $raw = match ($normalized) {
                 'sommer' => 9,
                 'winter' => 31,
-                default => throw new InvalidArgumentException('HK1_Sommergrenze erlaubt Sommer, Winter oder 10 bis 30 °C.'),
+                default => throw new InvalidArgumentException('Sommergrenze erlaubt Sommer, Winter oder 10 bis 30 °C.'),
             };
             $display = $raw === 9 ? 'Sommer' : 'Winter';
             return [$display, null, $this->insert([0x07, 0x00, 0x65, null, 0x65, 0x65, 0x65, 0x65], $raw)];
         }
 
-        return $this->integerPayload($value, 10, 30, [0x07, 0x00, 0x65, null, 0x65, 0x65, 0x65, 0x65], 'HK1_Sommergrenze');
+        return $this->integerPayload($value, 10, 30, [0x07, 0x00, 0x65, null, 0x65, 0x65, 0x65, 0x65], 'Sommergrenze');
     }
 
     private function halfDegreePayload(mixed $value, float $min, float $max, array $template, string $name): array

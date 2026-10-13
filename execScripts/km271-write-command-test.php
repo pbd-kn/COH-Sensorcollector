@@ -10,8 +10,8 @@ use PbdKn\cohSensorcollector\Sensor\Km271\Km271WriteCommandEncoder;
 
 $encoder = new Km271WriteCommandEncoder();
 $cases = [
-    ['HK1_Sommergrenze', 14, '07 00 65 0E 65 65 65 65'],
-    ['HK1_Sommergrenze', 'Sommer', '07 00 65 09 65 65 65 65'],
+    ['Sommergrenze', 14, '07 00 65 0E 65 65 65 65'],
+    ['Sommergrenze', 'Sommer', '07 00 65 09 65 65 65 65'],
     ['HK1_Betriebsart', 'Automatik', '07 00 65 65 65 65 02 65'],
     ['HK1_Tagtemperatur', '20,5', '07 00 65 65 65 29 65 65'],
     ['HK1_Nachttemperatur', 15, '07 00 65 65 1E 65 65 65'],
@@ -34,7 +34,7 @@ foreach ($cases as [$id, $value, $expected]) {
 
 $rejected = false;
 try {
-    $encoder->encode('HK1_Sommergrenze', 50);
+    $encoder->encode('Sommergrenze', 50);
 } catch (InvalidArgumentException) {
     $rejected = true;
 }

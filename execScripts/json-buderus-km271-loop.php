@@ -304,6 +304,7 @@ function buildValuesDocument(): array
 
 function germanJsonKey(string $label, string $unit): string
 {
+    if ($label === 'HK1 Sommergrenze') return 'Sommergrenze';
     $key = preg_replace('/[^\p{L}\p{N}]+/u', '_', trim($label));
     $key = trim((string) $key, '_');
     if ($label === 'Brennerlaufzeit') {

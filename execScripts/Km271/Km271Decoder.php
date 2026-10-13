@@ -121,11 +121,13 @@ final class Km271Decoder
         $burnerTypes = ['1-stufig', '2-stufig', 'Modulierend'];
         $heatingPrograms = ['Eigen', 'Familie', 'Früh', 'Spät', 'Vormittag', 'Nachmittag', 'Mittag', 'Single', 'Senior'];
 
-        if ($register === 0x0000 && count($data) >= 8) {
+        if ($register === 0x0169 && count($data) >= 3) {
+            $this->put($updated, 'hc2HeatingProgram', 'HK2 Heizprogramm', $heatingPrograms[$at(2)] ?? ('Code ' . $at(2)), '', $register, $at(2));
+        } elseif ($register === 0x0000 && count($data) >= 8) {
             $summerRaw = $at(3);
             $summer = $summerRaw === 9 ? 'Sommer' : ($summerRaw === 31 ? 'Winter' : $summerRaw);
             $summerUnit = is_int($summer) ? '°C' : '';
-            $this->put($updated, 'hc1SummerThreshold', 'HK1 Sommergrenze', $summer, $summerUnit, $register, $summerRaw);
+            $this->put($updated, 'hc1SummerThreshold', 'Sommergrenze', $summer, $summerUnit, $register, $summerRaw);
             $this->put($updated, 'hc1NightTemperature', 'HK1 Nachttemperatur', $at(4) / 2, '°C', $register, $at(4));
             $this->put($updated, 'hc1DayTemperature', 'HK1 Tagtemperatur', $at(5) / 2, '°C', $register, $at(5));
             $this->put($updated, 'hc1OperatingMode', 'HK1 Betriebsart', $modes[$at(6)] ?? ('Code ' . $at(6)), '', $register, $at(6));

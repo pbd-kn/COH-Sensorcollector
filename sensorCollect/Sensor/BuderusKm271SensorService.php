@@ -96,6 +96,7 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
                 if ($localId === '') {
                     $localId = $sensorId;
                 }
+                if ($localId === 'HK1_Sommergrenze') $localId = 'Sommergrenze';
 
                 if (strcasecmp($localId, 'KM271') === 0) {
                     $result[$sensorId] = $this->result($sensor, $document, 'json', 'json');
@@ -216,7 +217,7 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
                 $key .= '_2';
             }
             $readable[$key] = [
-                'Name' => (string) $entry['label'],
+                'Name' => $key === 'Sommergrenze' ? 'Sommergrenze' : (string) $entry['label'],
                 'Wert' => $entry['value'],
                 'Einheit' => (string) $entry['unit'] !== '' ? $entry['unit'] : null,
                 'Datum' => $entry['updatedAt'],
@@ -318,6 +319,8 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
 
     private function germanJsonKey(string $label, string $unit): string
     {
+        // Auch ältere Cache-Einträge unter dem neuen JSON-Schlüssel ausgeben.
+        if ($label === 'HK1 Sommergrenze') return 'Sommergrenze';
         $key = trim((string) preg_replace('/[^\p{L}\p{N}]+/u', '_', trim($label)), '_');
         if ($label === 'Brennerlaufzeit') {
             $key .= $unit === 'h' ? '_Stunden' : '_Minuten';
