@@ -132,6 +132,10 @@ final class Km271Decoder
             $this->put($updated, 'hc1DayTemperature', 'HK1 Tagtemperatur', $at(5) / 2, '°C', $register, $at(5));
             $this->put($updated, 'hc1OperatingMode', 'HK1 Betriebsart', $modes[$at(6)] ?? ('Code ' . $at(6)), '', $register, $at(6));
             $this->put($updated, 'hc1HolidayTemperature', 'HK1 Urlaubstemperatur', $at(7) / 2, '°C', $register, $at(7));
+        } elseif ($register === 0x0038 && count($data) >= 7) {
+            $this->put($updated, 'hc2NightTemperature', 'HK2 Nachttemperatur', $at(4) / 2, '°C', $register, $at(4));
+            $this->put($updated, 'hc2DayTemperature', 'HK2 Tagtemperatur', $at(5) / 2, '°C', $register, $at(5));
+            $this->put($updated, 'hc2OperatingMode', 'HK2 Betriebsart', $modes[$at(6)] ?? ('Code ' . $at(6)), '', $register, $at(6));
         } elseif ($register === 0x000E && count($data) >= 7) {
             $this->put($updated, 'hc1MaximumTemperature', 'HK1 Maximaltemperatur', $at(4), '°C', $register, $at(4));
             $this->put($updated, 'hc1DesignTemperature', 'HK1 Auslegungstemperatur', $at(6), '°C', $register, $at(6));

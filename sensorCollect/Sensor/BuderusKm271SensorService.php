@@ -27,6 +27,8 @@ final class BuderusKm271SensorService implements SensorFetcherInterface
         'hc1FlowTemperature', 'hc1RoomSetpoint', 'hc1RoomTemperature',
         'hc1StartOptimization', 'hc1StopOptimization', 'hc1PumpPower',
         'hc1MixerPosition',
+        'hc2NightTemperature', 'hc2DayTemperature', 'hc2OperatingMode',
+        'hc2NightTemperature', 'hc2DayTemperature', 'hc2OperatingMode',
         'hc2SummerMode', 'hc2HeatingProgram', 'hc2FlowSetpoint', 'hc2FlowTemperature', 'hc2RoomSetpoint',
         'hc2RoomTemperature', 'hc2PumpPower', 'hc2MixerPosition',
         'frostThreshold', 'hotWaterConfiguredTemperature', 'hotWaterOperatingMode',
