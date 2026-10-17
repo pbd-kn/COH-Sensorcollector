@@ -64,6 +64,31 @@ Beispiel:
 }
 ```
 
+## Schreiben von HK2 Tag- und Nachttemperatur
+
+Der separate Schreibkatalog in `Km271WriteCommandEncoder.php` unterstützt
+`HK2_Tagtemperatur` und `HK2_Nachttemperatur` mit 10 bis 30 °C in
+0,5-°C-Schritten. Beide verwenden den Schreibbefehl `08 00`; die
+Nachttemperatur steht an Byteindex 4, die Tagtemperatur an Byteindex 5,
+jeweils als doppelter Temperaturwert. Die übrigen Nutzdaten bleiben `65`.
+Protokollreferenz: [ESP_Buderus_KM271, km271.cpp](https://github.com/dewenni/ESP_Buderus_KM271/blob/main/src/km271.cpp),
+`KM271_SENDCMD_HC2_DAY_SETPOINT` und `KM271_SENDCMD_HC2_NIGHT_SETPOINT`.
+
+Die API `km271-command.php` und die Contao-Templates übernehmen den
+Schreibkatalog und die ausführbaren IDs automatisch. Vorschau,
+Schreibfreigabe und ausdrückliche Bestätigung gelten auch für diese Werte.
+Der lesende Sensorservice bleibt unverändert.
+
+Zur Installation nur `sensorCollect/Sensor/Km271/Km271WriteCommandEncoder.php`
+nach `/home/peter/scripts/coh/sensorcollect/Sensor/Km271/Km271WriteCommandEncoder.php`
+übertragen. API und Contao-Code benötigen hierfür keine Änderung.
+Ein Neustart des Collectors ist nicht erforderlich, da der Encoder durch
+die HTTP-API geladen wird. Bei OPcache mit deaktivierter Dateiprüfung muss
+der Cache des zuständigen PHP-Webprozesses erneuert werden. Danach die
+Contao-Seite neu laden, damit sie den erweiterten Katalog abruft.
+
+Offline-Prüfung: `php execScripts/km271-write-command-test.php`.
+
 ## Raspberry Pi
 
 ### Aktiver Sommer-/Winterbetrieb

@@ -21,6 +21,8 @@ final class Km271WriteCommandEncoder
             'HK1_Betriebsart' => $this->choice('HK1 Betriebsart', ['Nacht', 'Tag', 'Automatik']),
             'HK1_Tagtemperatur' => $this->number('HK1 Tagtemperatur', '°C', 10, 30, 0.5),
             'HK1_Nachttemperatur' => $this->number('HK1 Nachttemperatur', '°C', 10, 30, 0.5),
+            'HK2_Tagtemperatur' => $this->number('HK2 Tagtemperatur', '°C', 10, 30, 0.5),
+            'HK2_Nachttemperatur' => $this->number('HK2 Nachttemperatur', '°C', 10, 30, 0.5),
             'HK1_Urlaubstemperatur' => $this->number('HK1 Urlaubstemperatur', '°C', 10, 30, 0.5),
             'Sommergrenze' => [
                 'Bezeichnung' => 'Sommergrenze',
@@ -60,6 +62,8 @@ final class Km271WriteCommandEncoder
             'HK1_Betriebsart' => $this->enumPayload($value, ['Nacht', 'Tag', 'Automatik'], [0x07, 0x00, 0x65, 0x65, 0x65, 0x65, null, 0x65], $localId),
             'HK1_Tagtemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, 0x65, null, 0x65, 0x65], $localId),
             'HK1_Nachttemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, null, 0x65, 0x65, 0x65], $localId),
+            'HK2_Tagtemperatur' => $this->halfDegreePayload($value, 10, 30, [0x08, 0x00, 0x65, 0x65, 0x65, null, 0x65, 0x65], $localId),
+            'HK2_Nachttemperatur' => $this->halfDegreePayload($value, 10, 30, [0x08, 0x00, 0x65, 0x65, null, 0x65, 0x65, 0x65], $localId),
             'HK1_Urlaubstemperatur' => $this->halfDegreePayload($value, 10, 30, [0x07, 0x00, 0x65, 0x65, 0x65, 0x65, 0x65, null], $localId),
             'Sommergrenze' => $this->summerPayload($value),
             'HK1_Frostschutz_ab' => $this->integerPayload($value, -20, 10, [0x07, 0x31, 0x65, 0x65, 0x65, 0x65, 0x65, null], $localId, true),

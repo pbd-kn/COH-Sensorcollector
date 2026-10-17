@@ -15,6 +15,13 @@ $cases = [
     ['HK1_Betriebsart', 'Automatik', '07 00 65 65 65 65 02 65'],
     ['HK1_Tagtemperatur', '20,5', '07 00 65 65 65 29 65 65'],
     ['HK1_Nachttemperatur', 15, '07 00 65 65 1E 65 65 65'],
+    ['HK2_Tagtemperatur', '20,5', '08 00 65 65 65 29 65 65'],
+    ['HK2_Nachttemperatur', 15, '08 00 65 65 1E 65 65 65'],
+    ['HK2_Tagtemperatur', 10, '08 00 65 65 65 14 65 65'],
+    ['HK2_Tagtemperatur', 30, '08 00 65 65 65 3C 65 65'],
+    ['HK2_Nachttemperatur', 10, '08 00 65 65 14 65 65 65'],
+    ['HK2_Nachttemperatur', '29,5', '08 00 65 65 3B 65 65 65'],
+    ['HK2_Nachttemperatur', 30, '08 00 65 65 3C 65 65 65'],
     ['HK1_Urlaubstemperatur', 17, '07 00 65 65 65 65 65 22'],
     ['HK1_Frostschutz_ab', -5, '07 31 65 65 65 65 65 FB'],
     ['HK1_Auslegungstemperatur', 75, '07 0E 65 65 65 65 4B 65'],
@@ -40,6 +47,21 @@ try {
 }
 if (!$rejected) {
     throw new RuntimeException('Ungueltige Sommergrenze wurde nicht abgelehnt.');
+}
+
+foreach (['HK2_Tagtemperatur', 'HK2_Nachttemperatur'] as $id) {
+    $definition = $encoder->catalog()[$id] ?? [];
+    if (($definition['Minimum'] ?? null) !== 10 || ($definition['Maximum'] ?? null) !== 30 || ($definition['Schrittweite'] ?? null) !== 0.5) {
+        throw new RuntimeException("$id: Schreibkatalog unvollstaendig.");
+    }
+    foreach ([9.5, 30.5, 20.25, 'ungueltig'] as $value) {
+        try {
+            $encoder->encode($id, $value);
+        } catch (InvalidArgumentException) {
+            continue;
+        }
+        throw new RuntimeException("$id: ungueltiger Wert wurde nicht abgelehnt.");
+    }
 }
 
 echo 'OK: ' . count($cases) . " KM271-Schreibcodierungen und Wertepruefung erfolgreich.\n";
