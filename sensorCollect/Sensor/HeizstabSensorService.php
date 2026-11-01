@@ -17,7 +17,6 @@ class HeizstabSensorService implements SensorFetcherInterface
     private string $passwordField = 'pw';
     private bool $insecureTls = true;
     private string $cloudApiBaseUrl = 'https://api.my-pv.com/api/v1';
-    private string $configuredAccess = '';
 
     public function __construct(private mysql_dialog $db, private Logger $logger, private SimpleHttpClient $httpClient)
     {
@@ -40,7 +39,14 @@ class HeizstabSensorService implements SensorFetcherInterface
         $res = [];
 
         try {
-            $access = $this->configuredAccess;
+            if ($sensors === []) { return []; }
+            $firstSensor = reset($sensors);
+            $access = trim((string) ($firstSensor['geraeteUrl'] ?? ''));
+
+            if ($access === '') {
+                $this->logger->Error('Heizstab: Geräteadresse fehlt.');
+                return null;
+            }
 
             if ($access === '') {
                 $this->logger->Error('Heizstab: lokale URL/IP fehlt in den Sensorcollector-Einstellungen.');
@@ -435,7 +441,6 @@ class HeizstabSensorService implements SensorFetcherInterface
         }
         // Der Collector laeuft im selben LAN wie der Heizstab und greift immer
         // direkt auf data.jsn/setup.jsn des lokalen Geraets zu.
-        $this->configuredAccess = trim((string)($parameters['urlheizStab'] ?? ''));
     }
 
     private function getHeizstabdata($sensorID)

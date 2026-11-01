@@ -160,12 +160,37 @@ log "Backup-Verzeichnis: $BACKUP_DIR"
 SOURCE_SIZE="$(blockdev --getsize64 "$SOURCE_DEVICE")"
 FREE_SIZE="$(df -PB1 "$BACKUP_BASE" | awk 'NR==2 {print $4}')"
 REQUIRED=$(( SOURCE_SIZE * 80 / 100 ))
+REFERENCE_SIZE=0
+
+# Nur abgeschlossene Backups verwenden; Teilimages sind keine belastbare Basis.
+# Das größte vorhandene Image berücksichtigt auch schwankende Kompression.
+for PREVIOUS_DIR in "$BACKUP_ROOT"/*; do
+    [ -d "$PREVIOUS_DIR" ] || continue
+    PREVIOUS_DATE="${PREVIOUS_DIR##*/}"
+    [ -f "$BACKUP_BASE/ok_${PREVIOUS_DATE}.txt" ] || continue
+    PREVIOUS_IMAGE="$PREVIOUS_DIR/${PREVIOUS_DATE}_raspi.img.gz"
+    [ -s "$PREVIOUS_IMAGE" ] || continue
+    PREVIOUS_SIZE="$(stat -c %s "$PREVIOUS_IMAGE")"
+    if [ "$PREVIOUS_SIZE" -gt "$REFERENCE_SIZE" ]; then
+        REFERENCE_SIZE="$PREVIOUS_SIZE"
+    fi
+done
+
+if [ "$REFERENCE_SIZE" -gt 0 ]; then
+    # 50 % Wachstumsreserve plus 2 GiB für Dump und zusätzliche Archive.
+    REQUIRED=$(( REFERENCE_SIZE + REFERENCE_SIZE / 2 + 2 * 1024 * 1024 * 1024 ))
+    log "Speicherschätzung: größtes erfolgreiches Image $(numfmt --to=iec "$REFERENCE_SIZE"), plus 50 % und 2 GiB Reserve"
+else
+    log "Speicherschätzung: keine erfolgreichen Referenzimages vorhanden; 80 % der SD-Kartengröße"
+fi
 
 log "Quellgröße: $(numfmt --to=iec "$SOURCE_SIZE")"
 log "Freier Platz: $(numfmt --to=iec "$FREE_SIZE")"
+log "Benötigter freier Platz (Schätzung): $(numfmt --to=iec "$REQUIRED")"
+log "Hinweis: Die tatsächliche komprimierte Größe kann abweichen."
 
 [ "$FREE_SIZE" -ge "$REQUIRED" ] || {
-    log "=== FEHLER: Zu wenig freier Speicher."
+    log "=== FEHLER: Zu wenig freier Speicher: $(numfmt --to=iec "$FREE_SIZE") frei, mindestens $(numfmt --to=iec "$REQUIRED") geschätzt benötigt."
     exit 1
 }
 

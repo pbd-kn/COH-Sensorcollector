@@ -42,8 +42,9 @@ if ($port < 1 || $port > 65535 || $unitId < 0 || $unitId > 255 || $timeout < 0.1
 
 $classCandidates = [
     __DIR__ . '/AmpereStorageProModbus.php',
+    '/home/peter/scripts/coh/sensorcollect/Sensor/AmpereStorageProModbus.php',
     '/home/peter/coh/sensorCollect/Sensor/AmpereStorageProModbus.php',
-    dirname(__DIR__, 4) . '/sensorCollect/Sensor/AmpereStorageProModbus.php',
+    dirname(__DIR__, 5) . '/sensorCollect/Sensor/AmpereStorageProModbus.php',
 ];
 $classFile = null;
 foreach ($classCandidates as $candidate) {

@@ -1,5 +1,9 @@
 # AMPERE.StoragePro: JSON-Werte und Modbusregister
 
+Der gemeinsame Modbus-Leser und die Konfiguration zusätzlicher Geräte (einschließlich
+SAJ-Wechselrichter) sind unter [Modbus-Geräteprofile](MODBUS-GERAETEPROFILE.md)
+beschrieben. Die bisherigen StoragePro-Pfade bleiben kompatibel.
+
 Diese Referenz dokumentiert die Werte, die der lokale Modbus-Client in `snapshot.data` beziehungsweise über den Contao-Pfad `modbus.*` bereitstellt. Der Zugriff ist ausschließlich lesend über Modbus-Funktion 03.
 
 Dokumentationsstand: 9. August 2026  

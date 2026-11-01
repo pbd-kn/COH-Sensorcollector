@@ -1,0 +1,19 @@
+[Unit]
+Description=COH Energy Manager (observe/simulate)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=peter
+WorkingDirectory=/home/peter/scripts/coh/energy-manager
+EnvironmentFile=/home/peter/.config/coh-energy/database.env
+ExecStart=/usr/bin/php /home/peter/scripts/coh/energy-manager/energy-manager.php --config=/home/peter/.config/coh-energy/config.json
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

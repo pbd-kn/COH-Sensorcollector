@@ -13,7 +13,7 @@ const DISK_CHECK_SCRIPTS = [
     '/home/peter/scripts/coh/sensorcollect/Sensor/RaspberryExecScripts/check_disk_usage.sh',
     '/home/peter/scripts/coh/execScripts/check_disk_usage.sh',
 ];
-
+require_once __DIR__ . '/getIpAdressRaspi.php';
 function formatBytes(int|float $bytes): string
 {
     $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -148,6 +148,8 @@ foreach (glob('/proc/[0-9]*/cmdline') ?: [] as $cmdlineFile) {
         break;
     }
 }
+// * liefere ipadressen
+$ipAdresses = getIpAdressRaspi();
 
 echo json_encode([
     'ok' => true,
@@ -155,6 +157,7 @@ echo json_encode([
     'values' => [
         'system' => [
             // Bestehender Pfad bleibt kompatibel und verwendet weiterhin PHP.
+            'test' => 'test',
             'diskUsage' => $diskUsagePhp,
             'diskUsagePhp' => $diskUsagePhp,
             'diskUsageDf' => $diskUsageDf,
@@ -183,6 +186,8 @@ echo json_encode([
             'protocol' => $backupprotocol,
             'readError' => $errors['backup.protocol'] ?? null,
         ],
+        'ipAdresses' => $ipAdresses
+        ,
     ],
     'errors' => $errors,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

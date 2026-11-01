@@ -2,15 +2,21 @@
 
 Stand: 18.07.2026
 
-## Ampere.IQ-Werteexport fuer andere Anwendungen
+## IQBox und Wechselrichter manuell testen
 
-Der eigenstaendige, rein lesende Exporter `execScripts/json-solar-iqexport-loop.php`
-schreibt alle bekannten App-Werte in eine JSON-Datei. Wichtige Werte wie
-`batterySoc` stehen dort direkt unter `aliases`; alle Einzelwerte sind zusaetzlich
-unter `values` ueber eindeutige Pfade erreichbar. Details und Beispiele stehen
-in `execScripts/json-solar-iqexport-loop.md`. Ohne Optionen startet der Exporter eine
-interaktive Schleife, in der einzelne Bereiche ausgewaehlt und unmittelbar als
-JSON angezeigt werden. Mit `--all` wird weiterhin die Gesamtdatei erzeugt.
+`execScripts/json-solar-iqexport-loop.php` liest jetzt die IQBox direkt per
+Modbus, `execScripts/json-inverter-modbus-loop.php` den Wechselrichter. Beide
+verwenden `execScripts/ModbusLoop.php` und dieselben Profilgruppen wie der
+Collector. Befehle sind unter anderem `pv`, `live`, `today`, `lifetime`,
+`groups`, `list` und `help`. `--once=NAME` liefert genau eine Auswahl als JSON.
+
+Der IQBox-Standardhost kommt aus `iqBoxModbus.host` in
+`execScripts/task_heizstab_params.json`, sofern vorhanden, sonst aus dem
+bisherigen lokalen Standardhost. Eine Adresse beim Aufruf hat Vorrang.
+Die frueheren Cloud-Exportoptionen `--all`, `--output`, `--stdout` und
+`--params` entfallen; es werden keine Cloud-Endpunkte mehr aufgerufen und keine
+Exportdateien erzeugt. Weitere Beispiele stehen in
+`execScripts/json-solar-iqexport-loop.md`.
 
 ## Heizungsregelung
 

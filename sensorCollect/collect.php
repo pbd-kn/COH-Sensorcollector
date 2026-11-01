@@ -844,7 +844,7 @@ $logger->Info("Restart: " . date('d.m.Y H:i:s'));
 function collectorQuietPeriodWakeUp(\DateTimeImmutable $now): ?\DateTimeImmutable
 {
     $hour = (int) $now->format('G');
-    if ($hour >= 20) {
+    if ($hour >= 22) {
         return $now->modify('tomorrow')->setTime(6, 0);
     }
     if ($hour < 6) {
@@ -857,7 +857,7 @@ function collectorQuietPeriodWakeUp(\DateTimeImmutable $now): ?\DateTimeImmutabl
 while (true) {
     $iteration++;
 
-    // Zwischen 20:00 Uhr und 06:00 Uhr weder Sensoren lesen noch Werte speichern.
+    // Zwischen 22:00 Uhr und 06:00 Uhr weder Sensoren lesen noch Werte speichern.
     $now = new \DateTimeImmutable('now');
     $wakeUp = collectorQuietPeriodWakeUp($now);
     if ($wakeUp !== null) {

@@ -1,0 +1,45 @@
+{
+    "schemaVersion": 1,
+    "enabled": false,
+    "mode": "observe",
+    "timezone": "Europe/Berlin",
+    "pollSeconds": 5,
+    "maxSampleAgeSeconds": 20,
+    "storagePro": {
+        "host": null,
+        "port": 502,
+        "unitId": 1,
+        "timeoutSeconds": 3,
+        "writesEnabled": false,
+        "gridImportSign": null,
+        "batteryDischargeSign": null
+    },
+    "policy": {
+        "consumerPriority": [],
+        "minimumBatterySocPercent": null,
+        "gridReserveWatts": null,
+        "batteryDischargeAllowedForHeating": false
+    },
+    "heater": {
+        "enabled": false,
+        "driver": "my-pv-local",
+        "baseUrl": null,
+        "maximumPowerWatts": null,
+        "targetTemperatureCelsius": null,
+        "commandExpirySeconds": null
+    },
+    "heatPump": {
+        "enabled": false,
+        "driver": null,
+        "shellyModel": null,
+        "host": null,
+        "contactMapping": null,
+        "surplusOnWatts": null,
+        "surplusOffWatts": null,
+        "onDelaySeconds": null,
+        "offDelaySeconds": null,
+        "minimumRunSeconds": null,
+        "minimumPauseSeconds": null,
+        "fallbackContactState": null
+    }
+}

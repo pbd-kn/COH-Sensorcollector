@@ -1,0 +1,15 @@
+{
+    "_comment": "Deaktiviertes Beispiel mit fiktiver Testadresse. NICHT fuer den echten Wechselrichter freigegeben. _comment-Felder dienen nur der Erklaerung. label kann auch ddezimal sein",
+    "enabled": false,
+    "registers": {
+        "0x1234": {
+            "_comment": "Registeradresse: Hex 0x1234 = Dezimal 4660. Alternativ den Schluessel als \"4660\" angeben, niemals beide gleichzeitig.",
+            "minRaw": "0x0000",
+            "maxRaw": "0x0064",
+            "_comment_limits": "Minimum: Hex 0x0000 = Dezimal 0. Maximum: Hex 0x0064 = Dezimal 100. Alternativ minRaw: 0 und maxRaw: 100 verwenden.",
+            "functions": [6],
+            "_comment_functions": "FC06 = Hex 0x06 = Dezimal 6: ein Register schreiben. FC16 = Hex 0x10 = Dezimal 16: mehrere Register schreiben. functions verwendet Dezimalzahlen.",
+            "evidence": "Fiktives Beispielregister 0x1234 (4660), keine Herstellerfreigabe fuer StoragePro. Nicht an einem realen Geraet verwenden."
+        }
+    }
+}

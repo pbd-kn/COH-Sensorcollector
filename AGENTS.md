@@ -31,3 +31,11 @@
 - `collect.php` ohne Teststeuerung kann Dauerschleife, Sensorzugriffe, Speicherung und Bereinigung starten. Nicht für einen Syntaxcheck ausführen. `--console` startet einen DB-verbundenen Dialog mit anfänglich ausgeschaltetem Schreiben; `run` und `write on` verändern diese Betriebsart. `--cleanup-dry-run` liest die konfigurierte DB, bleibt deshalb eine bewusste Betriebsprüfung.
 - Cloudtests und Gerätescripts können Netzwerkzugriffe, Tokenaktualisierung oder reale Schaltbefehle auslösen. Für lokale Codeprüfung Fixtures/Offline-Tests verwenden; Livezugriffe, Uploads und Dienstneustarts nur im beauftragten Umfang ausführen.
 - Bei Änderungen benötigte Raspberry-Dateien und Neustarts benennen. Dateien unter `var/www/html/` sind Quellen für die Installation, keine Bestätigung einer bereits aktualisierten Raspberry-API.
+
+## Raspberry-Zugang für beide Projekte
+
+- Für beauftragte Raspberry-Arbeiten direkt `peter@192.168.178.49` mit dem vorhandenen SSH-Schlüssel `C:/Users/pbd/.ssh/id_ed25519_codex_raspi` verwenden. Der Name `raspberrypi` war lokal nicht auflösbar; der Schlüssel wird ohne ausdrückliche Angabe nicht automatisch verwendet.
+- PowerShell-Aufruf: `ssh -i "$env:USERPROFILE/.ssh/id_ed25519_codex_raspi" -o BatchMode=yes peter@192.168.178.49 "BEFEHL"`. Bei `scp` denselben Schlüssel mit `-i` angeben. Nur den Schlüsselpfad dokumentieren, niemals den privaten Schlüsselinhalt.
+- Collector-Ziel: `/home/peter/scripts/coh/sensorcollect/` (auf Linux kleingeschrieben). Dienst: `collect.service`; Neustart bei entsprechendem Auftrag mit `sudo -n systemctl restart collect.service`, anschließend Status prüfen.
+- Vor Übertragungen betroffene Zieldateien sichern. Bei der Umbenennung eines Sensorservices die alte PHP-Datei aus `Sensor/` entfernen, da der Collector die Dateien dort automatisch lädt.
+- Eigenständige Tasks und Loop-PHP-Dateien aus `execScripts/` gehören nach `/home/peter/scripts/coh/execScripts/` (Groß-/Kleinschreibung erhalten). Zielpfad und gegebenenfalls zuständigen Dienst je Datei prüfen; dafür nicht pauschal `sensorcollect/` oder `collect.service` verwenden.
