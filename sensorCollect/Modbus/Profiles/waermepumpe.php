@@ -723,7 +723,36 @@ return [
         'cascade.generatorStatus',
         'cascade.serial',
     ],
-    'blocks' => [],
+    'blocks' => [
+        // Pflichtwert AM016 zuerst: Verbindungsfehler sofort erkennen.
+        [400, 1, 3],
+        // Tab.128: Leistung, Temperatur, Algorithmus und Anforderungsart.
+        [256, 4, 3, 'optional' => true],
+        // Tab.122: Erzeuger- und Hydraulikstatus.
+        [279, 2, 3, 'optional' => true],
+        // Tab.122: Außenfühler und Jahreszeit.
+        [384, 2, 3, 'optional' => true],
+        // Tab.122: Geräterücklauf und ausstattungsabhängige Abgastemperatur.
+        [401, 2, 3, 'optional' => true],
+        // Tab.122: Wärmepumpenvorlauf und -rücklauf.
+        [403, 2, 3, 'optional' => true],
+        // Tab.122: TWW-Sollwert und Primärdruck.
+        [408, 2, 3, 'optional' => true],
+        // Tab.122: Status, Substatus und relative Leistung.
+        [411, 3, 3, 'optional' => true],
+        // Tab.122: UINT32-Zähler 419 bis 451 jeweils einschließlich Folgeregister.
+        [419, 34, 3, 'optional' => true],
+        // Tab.122: Pumpendrehzahl und UINT32-Leistung 460/461.
+        [459, 3, 3, 'optional' => true],
+        // Tab.160: Wartung einschließlich UINT32-Starts 516/517.
+        [512, 6, 3, 'optional' => true],
+        // Tab.161/163: Fehlerindikator und acht Fehler-/Matrixpaare.
+        [531, 17, 3, 'optional' => true],
+        // Tab.122: COP und COP-Umschaltschwelle.
+        [9230, 2, 3, 'optional' => true],
+        // Tab.164/165: Fallback und Analogeingang; nur lesen.
+        [21020, 8, 3, 'optional' => true],
+    ],
     'aliases' => [
         'vorlauf' => 'temperature.heatPumpFlow',
         'ruecklauf' => 'temperature.heatPumpReturn',

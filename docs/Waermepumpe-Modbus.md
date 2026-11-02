@@ -43,6 +43,17 @@ Lokale Sensor-IDs, jeweils auch mit `modbus.`:
 `temperature.flow` (400) ist Pflichtwert und wird zuerst gelesen; fehlende
 Ausstattungsregister sind optional und fehlen im Ergebnis statt als Null zu erscheinen.
 Keine unbekannten Registerlücken werden als große Blöcke abgefragt.
+Die explizite `blocks`-Liste fasst lückenlos dokumentierte Bereiche zusammen
+(Tab.122, 128, 160-165): 256-259, 279-280, 384-385, 401-404 in getrennten
+Zweierblöcken, 408-409, 411-413, 419-452, 459-461, 512-517, 531-547,
+9230-9231 und 21020-21027. Register 400 bleibt der erste Pflichtzugriff.
+Die übrigen Blöcke tragen `'optional' => true`: Bei einer fehlgeschlagenen oder
+unvollständigen Blockantwort werden die definierten Felder einzeln gelesen.
+So bleiben bei fehlender Ausstattung weiterhin verfügbare Nachbarwerte erhalten.
+Heizkreis- und Kaskadenregister bleiben wegen unbekannter Ausstattung und
+widersprüchlicher Adressen außerhalb der Blöcke. Die Blöcke sind anhand der
+Dokumentation vorbereitet; ihre Geräteunterstützung muss nach Inbetriebnahme
+geprüft werden. Schreibrechte werden durch Leseblöcke nicht verändert.
 Pro Host und Poll-Lauf wird ein Snapshot geteilt. Bei Inbetriebnahme optionale
 Register/Ausstattung einschränken, falls der Adapter viele Ausnahmen langsam beantwortet.
 UINT8/ENUM8 verwenden nur das untere Byte. UINT32 verwendet zunächst High-Word zuerst;
@@ -101,6 +112,8 @@ und `/home/peter/scripts/coh/sensorcollect/Sensor/WaermepumpeSensorServices.php`
 Auch `waermepumpe-control-catalog.php` in denselben Raspberry-Profilordner übertragen.
 Zusätzlich die erweiterten `ModbusProfile.php` und `ModbusSnapshotClient.php`
 im vorhandenen `Modbus/` installieren (8-Bit-Dekodierung). Vorherige Dateien sichern.
+Diese beiden Dateien enthalten außerdem die Unterstützung optionaler Leseblöcke
+und müssen zusammen mit dem aktualisierten Profil übertragen werden.
 `php tests/waermepumpe_modbus_test.php` arbeitet ausschließlich mit Fixtures.
 Bestehende Regressionen: `php tests/modbus_snapshot_test.php` und
 `php tests/modbus_control_test.php` (nur lokale TCP-Testserver).

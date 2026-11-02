@@ -13,7 +13,7 @@ return [
     'controls' => [
         'control.appMode' => [
             'address' => 0x3647, 'label' => 'Betriebsmodus',
-            'options' => [0 => 'Eigenverbrauch', 1 => 'Zeitbetrieb', 2 => 'Backup', 3 => 'Passiv'],
+            'options' => [0 => 'Eigenverbrauch', 2 => 'Backup', 3 => 'Passiv'],
         ],
         'control.passiveAction' => [
             'address' => 0x3636, 'label' => 'Passive Batteriesteuerung',

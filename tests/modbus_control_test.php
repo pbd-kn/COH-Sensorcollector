@@ -63,12 +63,13 @@ final class ControlFixture extends ModbusTcpClient
 
 foreach (['saj-h2', 'ampere-storagepro'] as $name) {
     $profile = ModbusProfile::load($name);
-    verify(count($profile['controls']) === 2 && count($profile['controlCatalog']) === 84, 'Nur zwei Schreibfreigaben, 84 reine Informationseinträge');
+    verify(count($profile['controls']) === 2 && count($profile['controlCatalog']) === 12, 'Nur zwei Schreibfreigaben, 12 reine Informationseinträge');
     foreach ($profile['controlCatalog'] as $setting => $definition) {
         verify($definition['writable'] === false && !isset($profile['controls'][$setting]), 'Katalog darf keine zusätzliche Schreibfreigabe erzeugen');
     }
     $fixture = new ControlFixture();
     $control = new ModbusControl($fixture, $profile);
+    expectFailure(fn () => $control->execute('control.appMode', 1, 0), 'nicht erlaubt');
     expectFailure(fn () => $control->execute('planned.onGridSoc', 20, 0), 'nicht zum Schreiben');
     expectFailure(fn () => $control->execute('planned.charge1.start', 360, 0), 'nicht zum Schreiben');
     verify($control->read('control.appMode')['value'] === 0 && $fixture->writes === [], 'Vorschau schreibt nichts');

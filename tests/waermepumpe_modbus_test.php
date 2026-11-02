@@ -50,6 +50,49 @@ verify($snapshot['data']['system']['pressure'] === 2.0, 'UINT8 und Druckfaktor')
 verify($snapshot['data']['counters']['starts'] === 65538, 'Zähler nicht differenzieren');
 verify(!isset($snapshot['data']['energy']), 'Fehlende Ausstattung nicht als Null');
 
+// Jeder Block muss lückenlos aus dokumentierten Feldern bestehen.
+$definedRegisters = [];
+foreach ($profile['fields'] as $field) {
+    for ($i = 0; $i < ModbusProfile::registerCount($field['type']); ++$i) {
+        $definedRegisters[$field['address'] + $i] = true;
+    }
+}
+foreach ($profile['blocks'] as $block) {
+    for ($i = 0; $i < $block[1]; ++$i) {
+        verify(isset($definedRegisters[$block[0] + $i]), 'Keine Registerlücke im Block');
+    }
+}
+$fixture = static fn (array $definition) => new class('fixture', $definition) extends ModbusSnapshotClient {
+    public int $requests = 0;
+    public function readHoldingRegisters(int $address, int $count): array
+    {
+        ++$this->requests;
+        return range($address, $address + $count - 1);
+    }
+};
+$batched = $fixture($profile);
+$singleProfile = $profile;
+$singleProfile['blocks'] = [];
+$single = $fixture($singleProfile);
+verify($batched->readSnapshot()['data'] === $single->readSnapshot()['data'], 'Blocklesen liefert identische Werte und absolute Zähler');
+verify($batched->requests < $single->requests, 'Blocklesen spart Anfragen');
+
+$offline = new class('fixture', $profile) extends ModbusSnapshotClient {
+    public int $requests = 0;
+    public function readHoldingRegisters(int $address, int $count): array
+    {
+        ++$this->requests;
+        throw new RuntimeException('Gateway nicht erreichbar');
+    }
+};
+try {
+    $offline->readSnapshot();
+    throw new LogicException('Pflichtfehler muss Snapshot abbrechen');
+} catch (RuntimeException $error) {
+    verify($error->getMessage() === 'Gateway nicht erreichbar' && $offline->requests === 1, 'Verbindungsfehler bricht vor optionalen Blöcken ab');
+}
+echo 'Blockanfragen bei vollständiger Ausstattung: ' . $batched->requests . ' statt ' . $single->requests . PHP_EOL;
+
 $calls = 0;
 $closed = false;
 $service = new WaermepumpeSensorServices(new mysql_dialog(), Logger::getInstance(), new SimpleHttpClient(),

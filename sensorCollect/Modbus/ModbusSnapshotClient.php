@@ -42,9 +42,22 @@ class ModbusSnapshotClient extends ModbusTcpClient
     public function readSnapshot(): array
     {
         $raw = [];
-        foreach ($this->profile['blocks'] as [$address, $count, $function]) {
-            foreach ($this->readFieldRegisters($address, $count, $function) as $offset => $value) {
-                $raw[$function][$address + $offset] = $value;
+        foreach ($this->profile['blocks'] as $block) {
+            [$address, $count, $function] = $block;
+            try {
+                $registers = $this->readFieldRegisters($address, $count, $function);
+                if (count($registers) !== $count) {
+                    throw new RuntimeException('Modbus-Leseblock ist unvollständig.');
+                }
+                foreach ($registers as $offset => $value) {
+                    $raw[$function][$address + $offset] = $value;
+                }
+            } catch (Throwable $error) {
+                if (!($block['optional'] ?? false)) {
+                    throw $error;
+                }
+                // Ausstattungsabhängiger Block: anschließend die definierten
+                // Werte einzeln lesen. Fehlende optionale Werte bleiben unbekannt.
             }
         }
         $values = [];

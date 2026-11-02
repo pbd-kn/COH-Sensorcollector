@@ -77,7 +77,8 @@ final class ModbusProfile
             $block[2] ??= 3;
             if (!is_int($block[0] ?? null) || !is_int($block[1] ?? null)
                 || $block[0] < 0 || $block[1] < 1 || $block[1] > 125 || $block[0] + $block[1] > 65536
-                || !in_array($block[2], [3, 4], true)) {
+                || !in_array($block[2], [3, 4], true)
+                || (isset($block['optional']) && !is_bool($block['optional']))) {
                 throw new InvalidArgumentException('Ungültiger Modbus-Leseblock.');
             }
         }
@@ -87,8 +88,9 @@ final class ModbusProfile
                 throw new InvalidArgumentException("Unbekanntes optionales Modbus-Feld '$name'.");
             }
             $field = $profile['fields'][$name];
-            foreach ($profile['blocks'] as [$address, $count, $function]) {
-                if ($function === $field['function'] && $field['address'] < $address + $count
+            foreach ($profile['blocks'] as $block) {
+                [$address, $count, $function] = $block;
+                if (!($block['optional'] ?? false) && $function === $field['function'] && $field['address'] < $address + $count
                     && $field['address'] + self::registerCount($field['type']) > $address) {
                     throw new InvalidArgumentException("Optionales Modbus-Feld '$name' muss außerhalb der Pflichtblöcke liegen.");
                 }
